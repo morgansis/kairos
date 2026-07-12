@@ -67,6 +67,7 @@ import json
 import queue
 import shutil
 import signal
+import hashlib
 import logging
 import threading
 import subprocess
@@ -78,6 +79,7 @@ import customtkinter as ctk
 from pathlib import Path
 from datetime import datetime
 from tkinter import filedialog, messagebox
+from collections import Counter, defaultdict
 
 def format_display_path(path_value):
     """Format a path for display without changing the path used for file I/O."""
@@ -162,8 +164,7 @@ VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v', '.3g
 EXCLUDE_DIR_KEYWORDS = ['helper.lrdata', 'previews.lrdata', 'smart previews.lrdata', 'lrcat-data', 'System Volume Information', '$RECYCLE.BIN']
 IGNORED_EXTENSIONS = ['.lrcat', '.lrdata', '.tmp', '.ds_store', '.db', '.xls', '.xlsx', '.doc', '.docx', '.pdf']
 
-PATTERN_PREFORMATTED = re.compile(r'^(\d{4})-(\d{2})-(\d{2}) \d{2}\.\d{2}\.\d{2}(?:-\d+)?$')
-PATTERN_SUFFIX = re.compile(r'^(.*?)(?:-\d+)$')
+TIMESTAMP_STEM_RE = re.compile(r'^(?P<base>\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2})(?P<suffix>-(?:\d{1,6}(?:-\d+)?|u\d+|c\d+))?$')
 # ===================================================
 
 class PluginWarningCapturer:
@@ -236,7 +237,7 @@ def format_time(seconds):
     return f"{m:02d}:{s:02d}"
 
 def is_identical_file(src_path, target_path):
-    """物理層級檢查：先比對檔案大小，若相同則讀取首尾 64KB 區塊內容，杜絕產生 -1 重複檔案"""
+    """先快速比對，再以完整 SHA-256 確認內容相同；絕不以片段比對作為略過依據。"""
     try:
         if os.path.getsize(src_path) != os.path.getsize(target_path):
             return False
@@ -249,10 +250,33 @@ def is_identical_file(src_path, target_path):
             if file_size > 65536:
                 f1.seek(-min(65536, file_size), os.SEEK_END)
                 f2.seek(-min(65536, file_size), os.SEEK_END)
-                return f1.read() == f2.read()
-            return True
+                if f1.read() != f2.read():
+                    return False
+        return file_sha256(src_path) == file_sha256(target_path)
     except Exception:
         return False
+
+def file_sha256(file_path, chunk_size=1024 * 1024):
+    digest = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        for chunk in iter(lambda: f.read(chunk_size), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def timestamp_parts(stem):
+    """只解析本程式的時間戳命名，避免把 IMG-001 之類原始檔名誤當衝突後綴。"""
+    match = TIMESTAMP_STEM_RE.fullmatch(stem)
+    if not match:
+        return None, None
+    return match.group('base'), match.group('suffix')
+
+def unique_path(directory, stem, ext):
+    candidate = directory / f"{stem}{ext}"
+    counter = 1
+    while candidate.exists():
+        candidate = directory / f"{stem}-{counter}{ext}"
+        counter += 1
+    return candidate
 
 def get_media_date(file_path):
     ext = Path(file_path).suffix.lower()
@@ -375,13 +399,6 @@ def is_burst_shot(src_path, target_path):
     tgt_subsec = get_exif_subsec(target_path)
     if src_subsec and tgt_subsec and src_subsec != tgt_subsec:
         return True
-
-    src_clean = PATTERN_SUFFIX.match(src_path.stem).group(1) if PATTERN_SUFFIX.match(src_path.stem) else src_path.stem
-    tgt_clean = PATTERN_SUFFIX.match(target_path.stem).group(1) if PATTERN_SUFFIX.match(target_path.stem) else target_path.stem
-    if not PATTERN_PREFORMATTED.match(src_clean) and not PATTERN_PREFORMATTED.match(tgt_clean):
-        if src_clean != tgt_clean:
-            return True
-
     return False
 
 def compare_and_decide(src_path, target_path):
@@ -398,6 +415,105 @@ def compare_and_decide(src_path, target_path):
         return src_mtime > tgt_mtime
     except OSError:
         return False
+
+def normalized_subsec(value):
+    """將 EXIF 亞秒標準化為毫秒字串；不足三位補零，超過三位取毫秒。"""
+    digits = ''.join(ch for ch in str(value or '') if ch.isdigit())
+    return (digits + '000')[:3] if digits else None
+
+def safe_rename_batch(rename_map):
+    """先改為唯一暫存名，再改為最終名，避免群組內名稱互換時覆蓋。"""
+    targets = list(rename_map.values())
+    if len(targets) != len(set(targets)):
+        raise ValueError("第二輪命名計畫有重複目標；未進行任何改名")
+    unmanaged_targets = [target for target in targets if target.exists() and target not in rename_map]
+    if unmanaged_targets:
+        raise FileExistsError(f"第二輪目標已存在且不屬於目前群組：{unmanaged_targets[0]}")
+    staged = []
+    for index, (source, target) in enumerate(rename_map.items()):
+        if source == target:
+            continue
+        temp = source.with_name(f".__kairos_stage_{index}_{source.name}")
+        while temp.exists():
+            temp = temp.with_name(f".__kairos_stage_{index}_{time.time_ns()}_{source.name}")
+        source.rename(temp)
+        staged.append((temp, target))
+    for temp, target in staged:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            raise FileExistsError(f"第二輪目標已存在：{target}")
+        temp.rename(target)
+
+def second_pass_month(month_dir, stop_event):
+    """以同秒、同副檔名的圖片群組進行無刪除的連拍／候選整理。"""
+    groups = defaultdict(list)
+    for path in month_dir.iterdir():
+        if stop_event.is_set():
+            return
+        if not path.is_file() or path.suffix.lower() not in STANDARD_EXTENSIONS:
+            continue
+        base, _ = timestamp_parts(path.stem)
+        if base:
+            groups[(base, path.suffix.lower())].append(path)
+
+    for (base, ext), members in groups.items():
+        if stop_event.is_set() or len(members) < 2:
+            continue
+        known, unknown = defaultdict(list), []
+        for member in members:
+            subsec = normalized_subsec(get_exif_subsec(member))
+            (known[subsec] if subsec else unknown).append(member)
+
+        rename_map = {}
+        # 相同亞秒是同一張照片的版本；修改時間最新者留前台，其餘進牛棚。
+        for subsec, variants in known.items():
+            winner = max(variants, key=lambda p: p.stat().st_mtime)
+            if len(known) == 1:
+                winner_name = f"{base}{ext}"
+            else:
+                winner_name = f"{base}-{subsec}{ext}"
+            rename_map[winner] = month_dir / winner_name
+            candidate_index = 1
+            for variant in variants:
+                if variant == winner:
+                    continue
+                # 亞秒值納入候選檔名，避免多個連拍瞬間各自產生 -c1 而撞名。
+                target = unique_path(month_dir / 'bullpen', f"{base}-{subsec}-c{candidate_index}", ext)
+                rename_map[variant] = target
+                candidate_index += 1
+
+        # 缺少亞秒的檔案不做版本推論，強制保留在前台。
+        for index, member in enumerate(sorted(unknown, key=lambda p: p.name), start=1):
+            rename_map[member] = month_dir / f"{base}-u{index}{ext}"
+
+        safe_rename_batch(rename_map)
+
+def collect_media_records(dest_path, organize_by_time):
+    """第二輪後由實際目的地重建 HTML 索引，避免遺漏牛棚或略過檔。"""
+    records_by_group = defaultdict(list)
+    roots = [p for p in dest_path.iterdir() if p.is_dir()] if organize_by_time else [dest_path]
+    for root in roots:
+        month_key = root.name if organize_by_time else 'ALL_MEDIA'
+        for path in root.rglob('*'):
+            if not path.is_file() or path.name.startswith('_'):
+                continue
+            ext = path.suffix.lower()
+            if ext in RAW_EXTENSIONS:
+                continue
+            if ext not in STANDARD_EXTENSIONS and ext not in VIDEO_EXTENSIONS:
+                continue
+            base, _ = timestamp_parts(path.stem)
+            category = 'bullpen' if 'bullpen' in path.parts else ('video' if ext in VIDEO_EXTENSIONS else 'standard')
+            records_by_group[month_key].append({
+                'name': path.name, 'rel_path': path.relative_to(dest_path).as_posix(),
+                'size': path.stat().st_size, 'category': category,
+                'group_key': base or path.stem, 'group_order': 1 if category == 'bullpen' else 0
+            })
+    return records_by_group
+
+def destination_extension_counts(dest_path):
+    excluded = {'_manifest_audit_report.csv', '_manifest_audit_report.html', '_skip_fail_report.txt', '_file_type_summary.html'}
+    return Counter(p.suffix.lower() or '[無副檔名]' for p in dest_path.rglob('*') if p.is_file() and p.name not in excluded and not p.name.startswith('_process_log') and not p.name.endswith('_media_report.html'))
 
 def generate_html_report(output_root_dir, month_key, media_records):
     if not media_records:
@@ -417,20 +533,24 @@ def generate_html_report(output_root_dir, month_key, media_records):
         escaped_display_path = html.escape(display_rel_path, quote=True)
         fsize = format_size(rec['size'])
         category = rec['category']
+        group_key = rec.get('group_key', Path(fname).stem)
+        group_order = rec.get('group_order', 0)
 
         display_label = "IMAGE" if category == "standard" else category.upper()
         if category == "edited": display_label = "EDITED"
+        elif category == "bullpen": display_label = "⚾ 牛棚候選"
 
         badge_style = "background: #7D8C94; color: white;"
         if category == "raw": badge_style = "background: #A88B87; color: white;"
         elif category == "video": badge_style = "background: #66747A; color: white;"
         elif category == "edited": badge_style = "background: #8A9A8A; color: white;"
+        elif category == "bullpen": badge_style = "background: #E67E22; color: white;"
 
         error_div = '<div class="error-msg">檔案已刪除</div>'
         error_script = "this.closest('.media-card').classList.add('broken');"
 
         # 關鍵修復：將 edited 類別加入圖像渲染分支，確保修圖過的圖片也能正常顯示縮圖
-        if category in ("standard", "edited"):
+        if category in ("standard", "edited", "bullpen"):
             img_tag = f'<img data-src="{rel_path_encoded}" class="lazy-image" alt="{escaped_fname}" onerror="{error_script}">{error_div}'
         else:
             if category == "video":
@@ -443,7 +563,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
 
         # data-filepath 嚴格保留未轉碼之原始相對路徑，供 Windows/macOS 終端機刪除語法使用
         card = f"""
-        <div class="media-card" data-category="{category}" data-name="{html.escape(fname.lower(), quote=True)}" data-size="{rec['size']}" data-url="{rel_path_encoded}" data-filepath="{escaped_display_path}" data-display-name="{escaped_fname}">
+        <div class="media-card" data-category="{category}" data-name="{html.escape(fname.lower(), quote=True)}" data-group="{html.escape(group_key.lower(), quote=True)}" data-group-order="{group_order}" data-size="{rec['size']}" data-url="{rel_path_encoded}" data-filepath="{html.escape(str(Path(output_root_dir) / rel_path), quote=True)}" data-display-name="{escaped_fname}">
             <div class="img-container" onclick="openLightbox(this)" style="cursor: pointer;" title="點擊開啟全螢幕極限滿版瀏覽 / 影片串流">
                 {img_tag}
             </div>
@@ -620,7 +740,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
             let sortValue = document.getElementById("sortSelect").value;
 
             cards.sort(function(a, b) {{
-                if (sortValue === "name-asc") return a.dataset.name.localeCompare(b.dataset.name);
+                if (sortValue === "name-asc") {{ let groupCompare = a.dataset.group.localeCompare(b.dataset.group); return groupCompare || (parseInt(a.dataset.groupOrder) - parseInt(b.dataset.groupOrder)) || a.dataset.name.localeCompare(b.dataset.name); }}
                 if (sortValue === "name-desc") return b.dataset.name.localeCompare(a.dataset.name);
                 if (sortValue === "size-desc") return parseInt(b.dataset.size) - parseInt(a.dataset.size);
                 if (sortValue === "size-asc") return parseInt(a.dataset.size) - parseInt(b.dataset.size);
@@ -800,6 +920,25 @@ def generate_html_report(output_root_dir, month_key, media_records):
     except Exception:
         pass
 
+def generate_file_type_summary(output_root_dir, audit_manifest):
+    """產生獨立的副檔名統計頁；目的地數量以本次最終實體檔為準。"""
+    source = Counter(row[4].lower() or '[無副檔名]' for row in audit_manifest)
+    copied = Counter(row[4].lower() or '[無副檔名]' for row in audit_manifest if row[6] == '成功')
+    skipped = Counter(row[4].lower() or '[無副檔名]' for row in audit_manifest if row[6] == '略過')
+    failed = Counter(row[4].lower() or '[無副檔名]' for row in audit_manifest if row[6] == '失敗')
+    destination = destination_extension_counts(Path(output_root_dir))
+    extensions = sorted(set(source) | set(destination))
+    rows = ''.join(
+        f"<tr><td>{html.escape(ext)}</td><td>{source[ext]:,}</td><td>{copied[ext]:,}</td><td>{skipped[ext]:,}</td><td>{failed[ext]:,}</td><td>{destination[ext]:,}</td></tr>"
+        for ext in extensions
+    )
+    content = f'''<!doctype html><html lang="zh-TW"><meta charset="utf-8"><title>檔案類型統計</title>
+    <style>body{{font-family:Segoe UI,sans-serif;margin:24px;color:#2c3e50}}table{{border-collapse:collapse;width:100%;max-width:900px}}th,td{{padding:9px 12px;border:1px solid #dfe6e9;text-align:right}}th:first-child,td:first-child{{text-align:left}}th{{background:#eef2f3}}</style>
+    <h1>檔案類型統計</h1><p>來源掃描數包含本次掃描範圍內所有副檔名；目的地實際數不含程式產生的報表與日誌。</p>
+    <table><tr><th>副檔名</th><th>來源掃描數</th><th>本次成功複製</th><th>本次略過</th><th>本次失敗</th><th>目的地實際數</th></tr>{rows}</table></html>'''
+    with open(Path(output_root_dir) / '_file_type_summary.html', 'w', encoding='utf-8') as f:
+        f.write(content)
+
 # --- 產生免外掛、完全獨立可執行的 HTML 總對帳單報表 ---
 def generate_manifest_html(output_root_dir, audit_manifest):
     if not audit_manifest:
@@ -876,6 +1015,7 @@ def generate_manifest_html(output_root_dir, audit_manifest):
             <span style="font-size: 14px; color: #7F8C8D; font-weight: normal;">總收錄: <strong id="totalCount" style="color:#2C3E50;">0</strong> 筆資料</span>
         </h1>
         <div class="filter-bar">
+            <button onclick="window.open('_file_type_summary.html','fileTypeSummary','width=980,height=720')">檔案類型統計</button>
             <span>🔍 搜尋過濾:</span>
             <input type="text" id="searchInput" oninput="debounceFilter()" placeholder="關鍵字 (檔名、相機、插件訊息)...">
 
@@ -1088,6 +1228,8 @@ def generate_manifest_html(output_root_dir, audit_manifest):
 # --- 背景執行緒函式 ---
 def threaded_process_images(selected_folders, dest_dir, organize_by_time, normalize_name, separate_edited, copy_video, copy_raw, overwrite, q, stop_event):
     dest_path = Path(dest_dir)
+    # 編修分流已由第二輪同秒群組判讀取代；保留參數僅為舊設定相容。
+    separate_edited = False
     report_lines = []
     audit_manifest = []
 
@@ -1152,6 +1294,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     failed_count = 0
     start_time = time.time()
     processed_size_bytes = 0
+    q.put(('status', f"First Pass｜安全收集與完整去重：0 / {total_files} (0.0%)"))
 
     monthly_media_map = {}
 
@@ -1176,16 +1319,11 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                 camera_model = get_camera_model(file_path)
             captured_warnings.extend(capturer.get_messages())
 
-            clean_stem = stem
-            suffix_match = PATTERN_SUFFIX.match(stem)
+            timestamp_base, _ = timestamp_parts(stem)
+            clean_stem = timestamp_base or stem
 
-            if suffix_match:
-                clean_stem = suffix_match.group(1)
-
-            match = PATTERN_PREFORMATTED.match(clean_stem)
-
-            if match:
-                year, month = match.group(1), match.group(2)
+            if timestamp_base:
+                year, month = timestamp_base[:4], timestamp_base[5:7]
                 target_name = f"{clean_stem}{ext}"
             else:
                 if organize_by_time or normalize_name:
@@ -1210,7 +1348,6 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                     target_dir /= "raw"
                     category = "raw"
                 elif ext in VIDEO_EXTENSIONS:
-                    target_dir /= "video"
                     category = "video"
                 elif separate_edited:
                     # 使用攔截器包覆 is_media_edited
@@ -1242,40 +1379,21 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
             is_duplicate_skip = False
 
+            skip_reason = None
             if target_file.exists():
-                if overwrite and ext not in RAW_EXTENSIONS:
-                    decision = compare_and_decide(file_path, target_file)
-                    if decision == "BURST":
-                        counter = 1
-                        original_stem = target_file.stem
-                        while target_file.exists():
-                            if is_identical_file(file_path, target_file):
-                                is_duplicate_skip = True
-                                break
-                            target_file = target_dir / f"{original_stem}-{counter}{ext}"
-                            counter += 1
-                    elif decision is True:
-                        pass
-                    else:
-                        is_duplicate_skip = True
-                else:
+                original_stem = target_file.stem
+                while target_file.exists():
                     if is_identical_file(file_path, target_file):
                         is_duplicate_skip = True
-                    else:
-                        counter = 1
-                        original_stem = target_file.stem
-                        while target_file.exists():
-                            if is_identical_file(file_path, target_file):
-                                is_duplicate_skip = True
-                                break
-                            target_file = target_dir / f"{original_stem}-{counter}{ext}"
-                            counter += 1
+                        skip_reason = f"內容相同（完整 SHA-256 驗證）：{target_file.name}"
+                        break
+                    target_file = unique_path(target_dir, original_stem, ext)
 
             if is_duplicate_skip:
                 skipped_count += 1
                 processed_size_bytes += file_size
-                report_lines.append(f"[略過] {full_win_path} | 原因: 目標已存在實體相同或品質更佳之同名檔案 ({target_file.name})\n")
-                audit_manifest.append([file_path.name, str(file_path), str(target_file), camera_model, ext, category, "略過", f"實體相同或目標存在品質/時間更佳檔案 ({target_file.name})", plugin_msg_str])
+                report_lines.append(f"[略過：內容相同] {full_win_path} | 原因: {skip_reason}\n")
+                audit_manifest.append([file_path.name, str(file_path), str(target_file), camera_model, ext, category, "略過", skip_reason, plugin_msg_str])
                 q.put(('metrics', (time.time() - start_time, processed_size_bytes)))
                 q.put(('progress', (i + 1) / total_files))
                 continue
@@ -1326,13 +1444,30 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
         processed_size_bytes += file_size
         display_file_path = full_win_path if len(full_win_path) <= 65 else "..." + full_win_path[-62:]
+        phase_elapsed = time.time() - start_time
+        rate = (i + 1) / phase_elapsed if phase_elapsed > 0 else 0
+        remaining = (total_files - i - 1) / rate if rate > 0 else 0
         q.put(('progress', (i + 1) / total_files))
-        q.put(('status', f"🚀 正在處理: {i + 1} / {total_files} ({display_file_path})"))
+        overall_remaining = remaining * 1.15  # 第二輪尚未取得實際群組數，先以保守係數估算。
+        q.put(('status', f"First Pass｜安全收集與完整去重：{i + 1} / {total_files} ({(i + 1) / total_files:.1%})｜已耗時 {format_time(phase_elapsed)}｜本階段剩餘 {format_time(remaining)}｜整體預估剩餘 {format_time(overall_remaining)}｜{display_file_path}"))
         q.put(('metrics', (time.time() - start_time, processed_size_bytes)))
 
+    # Second Pass：所有檔案安全落地後，才進行同秒群組整理。
+    if not stop_event.is_set() and organize_by_time:
+        month_dirs = [p for p in dest_path.iterdir() if p.is_dir() and re.fullmatch(r'\d{4}_\d{2}', p.name)]
+        second_start = time.time()
+        for index, month_dir in enumerate(month_dirs, start=1):
+            elapsed = time.time() - second_start
+            rate = (index - 1) / elapsed if elapsed > 0 and index > 1 else 0
+            remaining = (len(month_dirs) - index + 1) / rate if rate else 0
+            q.put(('status', f"Second Pass｜整理連拍與牛棚候選：{index} / {len(month_dirs)} ({index / max(len(month_dirs), 1):.1%})｜已耗時 {format_time(elapsed)}｜整體預估剩餘 {format_time(remaining)}｜{month_dir.name}"))
+            second_pass_month(month_dir, stop_event)
+            q.put(('progress', index / max(len(month_dirs), 1)))
+
     generated_html_reports = []
-    if organize_by_time and monthly_media_map:
-        q.put(('status', "📊 正在根目錄生成各月份動態 HTML 報告 (100vw 懸浮燈箱與影音串流)..."))
+    if not stop_event.is_set():
+        monthly_media_map = collect_media_records(dest_path, organize_by_time)
+        q.put(('status', "正在依最終檔案狀態生成 HTML 預覽報告..."))
         for m_key, records in monthly_media_map.items():
             generate_html_report(dest_path, m_key, records)
             generated_html_reports.append((m_key, dest_path / f"{m_key}_media_report.html"))
@@ -1355,6 +1490,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                 ])
             q.put(('log', f"📋 CSV 報表已匯出: {manifest_path.name}"))
 
+            generate_file_type_summary(dest_path, audit_manifest)
             # 同步產出 HTML 總對帳單報表
             generate_manifest_html(dest_path, audit_manifest)
             q.put(('log', f"🌐 HTML 報表已匯出: _manifest_audit_report.html"))
@@ -1676,6 +1812,7 @@ class ImageOrganizerAppModern:
         self.time_chk.pack(side="left", padx=(0, 20))
         self.sep_edit_chk = ctk.CTkCheckBox(mode_frame, text="分離已編修過檔案", variable=self.separate_edited_var, font=app_font)
         self.sep_edit_chk.pack(side="left", padx=(0, 20))
+        self.sep_edit_chk.pack_forget()  # 編修分流由 Two-Pass 取代，不再提供舊選項。
 
         self.lbl_opt = ctk.CTkLabel(frame_top, text="動作選項 (Options):", font=app_font)
         self.lbl_opt.grid(row=3, column=0, padx=(20, 10), pady=(5, 20), sticky="e")
@@ -1981,10 +2118,18 @@ class ImageOrganizerAppModern:
             return
 
         try:
+            if any(Path(dest).iterdir()):
+                messagebox.showerror("Destination must be empty", "Please select a completely empty destination folder. This keeps the run metadata and reports complete.")
+                return
+        except OSError as e:
+            messagebox.showerror("Destination error", f"Cannot read destination folder: {e}")
+            return
+
+        try:
             dest_res = os.path.abspath(dest)
             for src_f in self.selected_src_folders:
                 src_res = os.path.abspath(src_f)
-                if os.path.commonpath([src_res, dest_res]) == src_res:
+                if os.path.commonpath([src_res, dest_res]) in (src_res, dest_res):
                     messagebox.showerror("嚴重錯誤", f"「輸出目錄」不能位於「來源目錄 ({format_display_path(src_f)})」裡面！\n\n這會導致無限迴圈複製，請重新設定。")
                     return
         except Exception: pass

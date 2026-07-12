@@ -1,6 +1,6 @@
 """
 ================================================================================
-媒體檔案自動化整理與劇院級檢視工具 (Media Organizer Pro) - v2026-07-11
+媒體檔案自動化整理與劇院級檢視工具 (Media Organizer Pro) - v2026-07-13
 ================================================================================
 Designed for creators, this tool provides safe, lossless media archiving
 with millisecond burst protection, intelligent deduplication, and a full-screen
@@ -26,11 +26,15 @@ interactive lightbox experience.
      - 支援將修圖軟體 (Photoshop/Lightroom 等) 導出的已編修照片自動分離至 `edited/` 目錄。
      - 若勾選「強制覆蓋」，當遇到同名非連拍的二次修圖作品時，系統會自動比對修改時間與
        檔案特徵，保留最新、品質最佳的版本。
+  4. 外掛異常精準攔截與對帳單整合：
+     - 自動捕捉 exifread、Pillow、hachoir 等第三方解析外掛所產生的警告與錯誤，
+       直接關聯至當前處理檔案並同步整合進 CSV/HTML 對帳單中的「插件訊息」欄位，不再繁雜刷屏。
 
 二、 劇院級互動 HTML 報告與懸浮燈箱 (Interactive Report & Overlay Lightbox)：
-  1. 根目錄集中式報告：
-     各月份處理結果會直接於「輸出根目錄」生成單一 HTML 視覺化報告（如 2026_04_media_report.html），
-     內嵌 Intersection Observer 延遲載入 (Lazy Load) 技術，萬張照片也順暢不卡頓。
+  1. 根目錄集中式報告與免外掛總對帳單：
+     - 各月份處理結果會直接於「輸出根目錄」生成單一 HTML 視覺化報告（如 2026_04_media_report.html），
+       內嵌 Intersection Observer 延遲載入 (Lazy Load) 技術，萬張照片也順暢不卡頓。
+     - 同時產出 `_manifest_audit_report.html` 免外掛互動式對帳單，支援關鍵字搜尋與分類過濾。
   2. 究極滿版懸浮燈箱 (100vw / 100vh Overlay Lightbox)：
      - 點擊照片或影片即進入全螢幕燈箱，畫面直接擴展至瀏覽器視窗的 100% 極限滿版，絕不浪費螢幕空間。
      - 控制資訊（張數、檔名、類別、刪除按鈕與箭頭）採取「半透明漸層懸浮列 (Overlay)」設計，
@@ -53,14 +57,17 @@ interactive lightbox experience.
 """
 
 import os
+import io
 import re
 import sys
 import csv
 import html
 import time
+import json
 import queue
 import shutil
 import signal
+import logging
 import threading
 import subprocess
 import webbrowser
@@ -130,7 +137,7 @@ THEMES = {
 # 預設啟動色系
 DEFAULT_THEME_NAME = "晨霧灰藍 (沈穩)"
 # ===================== 程式設定 =====================
-VERSION = "2026-07-11"
+VERSION = "2026-07-13"
 
 # 1. 判斷是否為打包後的執行檔
 if getattr(sys, 'frozen', False):
@@ -151,13 +158,54 @@ DATE_TIME_ORIGINAL_TAG = 36867
 
 STANDARD_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.webp', '.heic', '.heif'}
 RAW_EXTENSIONS = {'.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.orf', '.rw2', '.psd'}
-VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v', '.3gp'}
+VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v', '.3gp', '.mts', '.m2ts', '.mpg'}
 EXCLUDE_DIR_KEYWORDS = ['helper.lrdata', 'previews.lrdata', 'smart previews.lrdata', 'lrcat-data', 'System Volume Information', '$RECYCLE.BIN']
-IGNORED_EXTENSIONS = ['.lrcat', '.lrdata', '.tmp', '.ds_store', '.db']
+IGNORED_EXTENSIONS = ['.lrcat', '.lrdata', '.tmp', '.ds_store', '.db', '.xls', '.xlsx', '.doc', '.docx', '.pdf']
 
 PATTERN_PREFORMATTED = re.compile(r'^(\d{4})-(\d{2})-(\d{2}) \d{2}\.\d{2}\.\d{2}(?:-\d+)?$')
 PATTERN_SUFFIX = re.compile(r'^(.*?)(?:-\d+)$')
 # ===================================================
+
+class PluginWarningCapturer:
+    """專門用來攔截第三方外掛 (exifread, hachoir, PIL) 輸出警告與錯誤的攔截器"""
+    def __init__(self):
+        self.output = io.StringIO()
+        self.handler = logging.StreamHandler(self.output)
+        self.handler.setFormatter(logging.Formatter('%(message)s'))
+        self.old_stderr = sys.stderr
+        self.old_hachoir_handler = None
+
+    def __enter__(self):
+        sys.stderr = self.output
+        exifread_logger = logging.getLogger('exifread')
+        exifread_logger.addHandler(self.handler)
+        exifread_logger.setLevel(logging.WARNING)
+        try:
+            import hachoir.core.warning as h_warn
+            self.old_hachoir_handler = h_warn.logWarning
+            h_warn.logWarning = self._hachoir_warn_callback
+        except Exception:
+            pass
+        return self
+
+    def _hachoir_warn_callback(self, msg, *args, **kwargs):
+        self.output.write(f"[hachoir] {msg}\n")
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stderr = self.old_stderr
+        logging.getLogger('exifread').removeHandler(self.handler)
+        try:
+            import hachoir.core.warning as h_warn
+            if self.old_hachoir_handler:
+                h_warn.logWarning = self.old_hachoir_handler
+        except Exception:
+            pass
+
+    def get_messages(self):
+        content = self.output.getvalue().strip()
+        if not content:
+            return []
+        return [line.strip() for line in content.split('\n') if line.strip()]
 
 def resource_path(relative_path):
     # 取得資源的絕對路徑，兼容開發模式與 PyInstaller 打包模式
@@ -239,6 +287,40 @@ def get_media_date(file_path):
             except Exception: pass
 
     return datetime.fromtimestamp(os.path.getmtime(file_path))
+
+def get_camera_model(file_path):
+    """讀取相機型號與品牌，若無則回傳 '-' """
+    ext = Path(file_path).suffix.lower()
+    if ext in VIDEO_EXTENSIONS:
+        if HACHOIR_AVAILABLE:
+            try:
+                parser = createParser(str(file_path))
+                if parser:
+                    with parser:
+                        metadata = extractMetadata(parser)
+                        if metadata and metadata.has("camera_model"):
+                            val = str(metadata.get("camera_model")).strip()
+                            if val: return val
+            except Exception:
+                pass
+    else:
+        if EXIFREAD_AVAILABLE:
+            try:
+                with open(file_path, 'rb') as f:
+                    tags = exifread.process_file(f, stop_tag='Image Model', details=False)
+                    model = str(tags.get('Image Model', '')).strip()
+                    make = str(tags.get('Image Make', '')).strip()
+                    if model and make:
+                        if make.lower() in model.lower():
+                            return model
+                        return f"{make} {model}"
+                    elif model:
+                        return model
+                    elif make:
+                        return make
+            except Exception:
+                pass
+    return "-"
 
 def is_media_edited(file_path):
     ext = Path(file_path).suffix.lower()
@@ -407,32 +489,13 @@ def generate_html_report(output_root_dir, month_key, media_records):
         .badge {{ padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; }}
         .card-del-btn {{ background: #EAECEE; color: #7F8C8D; font-size: 11px; padding: 5px; width: 100%; border-radius: 4px; margin-top: 5px; }}
         .media-card.marked-delete .card-del-btn {{ background: #e74c3c; color: white; }}
-
-        .error-msg {{
-            display: none;
-            padding: 20px;
-            font-size: 12px;
-            color: #999;
-            text-align: center;
-        }}
-
-        .media-card.broken .lazy-image,
-        .media-card.broken .video-placeholder,
-        .media-card.broken .raw-placeholder {{
-            display: none !important;
-        }}
-
-        .media-card.broken .error-msg {{
-            display: block !important;
-        }}
-
-        /* 刪除指令導出與剪貼簿區塊 */
+        .error-msg {{ display: none; padding: 20px; font-size: 12px; color: #999; text-align: center; }}
+        .media-card.broken .lazy-image, .media-card.broken .video-placeholder, .media-card.broken .raw-placeholder {{ display: none !important; }}
+        .media-card.broken .error-msg {{ display: block !important; }}
         .delete-bar {{ background: #FFF3CD; border: 1px solid #FFEEBA; color: #856404; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none; align-items: center; gap: 20px; font-weight: bold; }}
         .delete-btns {{ display: flex; flex-direction: row; gap: 8px; flex-wrap: wrap; }}
         .btn-copy {{ background: #27AE60; color: white; width: 250px; text-align: left; }}
         .btn-copy:hover {{ background: #1E8449; }}
-
-        /* 究極滿版懸浮燈箱 (100vw / 100vh Overlay Lightbox) */
         .lightbox {{ display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100vw; height: 100vh; background-color: #000000; align-items: center; justify-content: center; overflow: hidden; }}
         .lightbox-content {{ width: 100vw; height: 100vh; max-width: 100vw; max-height: 100vh; object-fit: contain; }}
         .lightbox-top-bar {{ position: absolute; top: 0; left: 0; width: 100%; padding: 20px 30px; background: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%); display: flex; justify-content: space-between; align-items: center; z-index: 1002; box-sizing: border-box; pointer-events: none; }}
@@ -649,55 +712,6 @@ def generate_html_report(output_root_dir, month_key, media_records):
             }});
         }}
 
-        function downloadDeleteScript(type) {{
-            let markedCards = document.querySelectorAll(".media-card.marked-delete");
-            if (markedCards.length === 0) return;
-
-            let content = "";
-            let filename = "";
-            if (type === 'bat') {{
-                filename = "delete_marked_files.bat";
-                content = "@echo off\\r\\nchcp 65001 >nul\\r\\necho [Media Organizer Pro] 正在執行標記廢片刪除...\\r\\n";
-                markedCards.forEach(c => {{
-                    let relPath = (c.dataset.filepath || c.dataset.url).replace(/\\//g, '\\\\');
-                    content += `if exist "${{relPath}}" ( del /f /q "${{relPath}}" & echo 已刪除: "${{relPath}}" ) else ( echo 找不到檔案: "${{relPath}}" )\\r\\n`;
-                }});
-                content += "echo.\\r\\necho 刪除作業完成！\\r\\npause\\r\\n";
-            }} else if (type === 'ps1') {{
-                filename = "delete_marked_files.ps1";
-                content = "# [Media Organizer Pro] Windows PowerShell 刪除腳本\\r\\n";
-                content += "Write-Host '[Media Organizer Pro] 正在執行標記廢片刪除...'\\r\\n";
-                markedCards.forEach(c => {{
-                    let relPath = (c.dataset.filepath || c.dataset.url).replace(/\\//g, '\\\\');
-                    let literalPath = relPath.replace(/'/g, "''");
-                    content += `if (Test-Path -LiteralPath '${{literalPath}}' -PathType Leaf) {{ Remove-Item -LiteralPath '${{literalPath}}' -Force; Write-Host '已刪除: ${{literalPath}}' }} else {{ Write-Host '找不到檔案: ${{literalPath}}' }}\\r\\n`;
-                }});
-                content += "Write-Host '刪除作業完成！'\\r\\n";
-            }} else if (type === 'sh') {{
-                filename = "delete_marked_files.sh";
-                content = "#!/bin/bash\\n# [Media Organizer Pro] macOS / Linux 終端機刪除腳本\\necho '[Media Organizer Pro] 正在執行標記廢片刪除...'\\n";
-                markedCards.forEach(c => {{
-                    let relPath = c.dataset.filepath || c.dataset.url;
-                    let quotedPath = quotePosixShell(relPath);
-                    content += `if [ -f ${{quotedPath}} ]; then rm -f ${{quotedPath}} && printf '已刪除: %s\\n' ${{quotedPath}}; else printf '找不到檔案: %s\\n' ${{quotedPath}}; fi\\n`;
-                }});
-                content += "echo '刪除作業完成！'\\n";
-            }} else {{
-                filename = "delete_marked_files.txt";
-                content = "# 待刪除檔案清單 (可手動貼入終端機執行或更改副檔名為 .bat / .sh)\\r\\n";
-                markedCards.forEach(c => {{
-                    content += `${{c.dataset.filepath || c.dataset.url}}\\r\\n`;
-                }});
-            }}
-
-            let blob = new Blob([content], {{ type: 'text/plain;charset=utf-8' }});
-            let link = document.createElement('a');
-            link.href = URL.toDataURL ? URL.createObjectURL(blob) : '';
-            link.download = filename;
-            link.click();
-        }}
-
-        // --- 滿版懸浮 Lightbox 燈箱控制 ---
         function openLightbox(element) {{
             document.body.style.overflow = 'hidden';
             updateVisibleCardsList();
@@ -786,6 +800,291 @@ def generate_html_report(output_root_dir, month_key, media_records):
     except Exception:
         pass
 
+# --- 產生免外掛、完全獨立可執行的 HTML 總對帳單報表 ---
+def generate_manifest_html(output_root_dir, audit_manifest):
+    if not audit_manifest:
+        return
+    import json
+    html_path = Path(output_root_dir) / "_manifest_audit_report.html"
+
+    # 1. 為了減少體積與記憶體，將資料轉為純陣列結構，不再生成任何靜態 <tr> HTML
+    # 順序對應: 0:檔名, 1:來源, 2:輸出, 3:相機, 4:副檔名, 5:類別, 6:狀態, 7:理由, 8:插件
+    clean_data = []
+    for row in audit_manifest:
+        clean_data.append([
+            str(row[0]),
+            # 若原始為 "N/A"，統一強制轉為 "-"
+            format_display_path(row[1]) if (row[1] and row[1] != "N/A") else "-",
+            format_display_path(row[2]) if (row[2] and row[2] != "N/A") else "-",
+            str(row[3]),
+            str(row[4]),
+            str(row[5]),
+            str(row[6]),
+            str(row[7]),
+            str(row[8])
+        ])
+
+    # 2. 將 Python List 轉為壓縮版 JSON 字串 (去除多餘空白，體積縮小 80%)
+    json_data_str = json.dumps(clean_data, ensure_ascii=False, separators=(',', ':'))
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>媒體處理對帳報告表</title>
+    <style>
+        :root {{ --bg: #F4F6F7; --card-bg: #FFFFFF; --text: #4A4F54; --border: #E0E4E6; --main: #7D8C94; }}
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }}
+        header {{ background: var(--card-bg); padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }}
+        h1 {{ margin: 0 0 15px 0; font-size: 22px; color: #2C3E50; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }}
+        .filter-bar {{ display: flex; flex-wrap: wrap; gap: 15px; align-items: center; border-top: 1px solid var(--border); padding-top: 15px; }}
+        .btn-group {{ display: flex; gap: 6px; flex-wrap: wrap; }}
+        button {{ background: var(--main); color: white; border: none; padding: 6px 14px; border-radius: 5px; cursor: pointer; transition: 0.2s; font-size: 13px; font-weight: bold; }}
+        button:hover, button.active {{ background: #2C3E50; }}
+        button:disabled {{ background: #BDC3C7; cursor: not-allowed; }}
+        input[type="text"] {{ padding: 8px 12px; border-radius: 5px; border: 1px solid var(--border); outline: none; font-size: 14px; width: 280px; }}
+
+        /* 分頁控制器 */
+        .pagination-bar {{ display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 12px 20px; border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }}
+        .page-info {{ font-weight: bold; color: #2C3E50; font-size: 14px; }}
+        select {{ padding: 6px 10px; border-radius: 5px; border: 1px solid var(--border); font-size: 13px; outline: none; }}
+
+        .table-container {{ background: var(--card-bg); border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow-x: auto; border: 1px solid var(--border); min-height: 500px; }}
+        table {{ width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; white-space: nowrap; }}
+        th {{ background: #EAECEE; color: #2C3E50; padding: 12px 15px; font-weight: bold; border-bottom: 2px solid var(--border); position: sticky; top: 0; z-index: 10; }}
+        td {{ padding: 10px 15px; border-bottom: 1px solid var(--border); vertical-align: middle; }}
+        tr:hover {{ background-color: #F8F9F9; }}
+        tr.has-plugin-warn {{ background-color: #FFFDF0; }}
+        tr.has-plugin-warn:hover {{ background-color: #FFF9D6; }}
+
+        .font-bold {{ font-weight: bold; color: #2C3E50; }}
+        .path-cell {{ max-width: 250px; overflow: hidden; text-overflow: ellipsis; color: #7F8C8D; }}
+        .reason-cell {{ max-width: 200px; overflow: hidden; text-overflow: ellipsis; }}
+        .plugin-cell {{ max-width: 250px; overflow: hidden; text-overflow: ellipsis; color: #D68910; font-weight: 500; }}
+        .cam-badge {{ background: #EAEDED; color: #5D6D7E; padding: 3px 8px; border-radius: 4px; font-size: 12px; }}
+        .status-badge {{ padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }}
+        .status-success {{ background: #D4EFDF; color: #196F3D; }}
+        .status-skip {{ background: #FCF3CF; color: #B7950B; }}
+        .status-fail {{ background: #FADBD8; color: #943126; }}
+    </style>
+</head>
+<body>
+    <header>
+        <h1>
+            <span>📋 媒體處理總對帳單 </span>
+            <span style="font-size: 14px; color: #7F8C8D; font-weight: normal;">總收錄: <strong id="totalCount" style="color:#2C3E50;">0</strong> 筆資料</span>
+        </h1>
+        <div class="filter-bar">
+            <span>🔍 搜尋過濾:</span>
+            <input type="text" id="searchInput" oninput="debounceFilter()" placeholder="關鍵字 (檔名、相機、插件訊息)...">
+
+            <span style="margin-left: 10px;">狀態篩選:</span>
+            <div class="btn-group" id="statusBtns">
+                <button class="active" onclick="setFilter('status', 'all', this)">全部</button>
+                <button onclick="setFilter('status', '成功', this)">✅ 成功</button>
+                <button onclick="setFilter('status', '略過', this)">⏭️ 略過</button>
+                <button onclick="setFilter('status', '失敗', this)">❌ 失敗</button>
+            </div>
+
+            <span style="margin-left: 10px;">類別:</span>
+            <div class="btn-group" id="catBtns">
+                <button class="active" onclick="setFilter('cat', 'all', this)">全部</button>
+                <button onclick="setFilter('cat', 'standard', this)">照片</button>
+                <button onclick="setFilter('cat', 'edited', this)">已修圖</button>
+                <button onclick="setFilter('cat', 'video', this)">影片</button>
+                <button onclick="setFilter('cat', 'raw', this)">RAW</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 分頁控制列 -->
+    <div class="pagination-bar">
+        <div class="btn-group">
+            <button id="btnFirst" onclick="changePage(1)">⏪ 第一頁</button>
+            <button id="btnPrev" onclick="changePage(currentPage - 1)">◀ 上一頁</button>
+            <button id="btnNext" onclick="changePage(currentPage + 1)">下一頁 ▶</button>
+            <button id="btnLast" onclick="changePage(totalPages)">最末頁 ⏩</button>
+        </div>
+        <div class="page-info">
+            第 <span id="pageSpan" style="color:#E74C3C; font-size:16px;">1</span> / <span id="totalPageSpan">1</span> 頁
+            (目前顯示：<span id="showingRangeSpan">0 - 0</span> 筆)
+        </div>
+        <div>
+            每頁顯示:
+            <select id="pageSizeSelect" onchange="changePageSize()">
+                <option value="100">100 筆</option>
+                <option value="250" selected>250 筆</option>
+                <option value="500">500 筆</option>
+                <option value="1000">1000 筆</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>檔案名稱</th>
+                    <th>來源完整路徑</th>
+                    <th>輸出目標路徑</th>
+                    <th>相機型號</th>
+                    <th>副檔名</th>
+                    <th>處理類別</th>
+                    <th>最終狀態</th>
+                    <th>詳細說明/略過原因</th>
+                    <th>插件訊息</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <!-- 資料會透過 JS 記憶體分頁極速渲染 -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // 1. 載入原始 JSON 大數據陣列
+        const RAW_DATA = {json_data_str};
+
+        let filteredData = RAW_DATA;
+        let currentPage = 1;
+        let pageSize = 250;
+        let totalPages = 1;
+
+        let filterState = {{ status: 'all', cat: 'all', keyword: '' }};
+        let filterTimeout = null;
+
+        document.addEventListener("DOMContentLoaded", function() {{
+            document.getElementById("totalCount").innerText = RAW_DATA.length.toLocaleString();
+            applyFilters();
+        }});
+
+        function setFilter(type, value, btn) {{
+            filterState[type] = value;
+            let container = (type === 'status') ? document.getElementById("statusBtns") : document.getElementById("catBtns");
+            let btns = container.getElementsByTagName("button");
+            for (let b of btns) b.classList.remove("active");
+            btn.classList.add("active");
+            applyFilters();
+        }}
+
+        // 使用 Debounce 避免連續敲打鍵盤時重複運算
+        function debounceFilter() {{
+            clearTimeout(filterTimeout);
+            filterTimeout = setTimeout(() => {{
+                filterState.keyword = document.getElementById("searchInput").value.trim().toLowerCase();
+                applyFilters();
+            }}, 150);
+        }}
+
+        // 記憶體極速過濾核心 (26 萬筆僅耗時幾毫秒)
+        function applyFilters() {{
+            let kw = filterState.keyword;
+            filteredData = RAW_DATA.filter(row => {{
+                if (filterState.status !== 'all' && row[6] !== filterState.status) return false;
+                if (filterState.cat !== 'all' && row[5] !== filterState.cat) return false;
+                if (kw !== "") {{
+                    let searchStr = (row[0] + " " + row[3] + " " + row[8]).toLowerCase();
+                    if (searchStr.indexOf(kw) === -1) return false;
+                }}
+                return true;
+            }});
+
+            currentPage = 1;
+            updatePagination();
+            renderTable();
+        }}
+
+        function changePageSize() {{
+            pageSize = parseInt(document.getElementById("pageSizeSelect").value);
+            currentPage = 1;
+            updatePagination();
+            renderTable();
+        }}
+
+        function changePage(targetPage) {{
+            if (targetPage < 1 || targetPage > totalPages || targetPage === currentPage) return;
+            currentPage = targetPage;
+            updatePagination();
+            renderTable();
+            window.scrollTo({{ top: 0, behavior: 'smooth' }});
+        }}
+
+        function updatePagination() {{
+            let totalRecords = filteredData.length;
+            totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
+            if (currentPage > totalPages) currentPage = totalPages;
+
+            document.getElementById("pageSpan").innerText = currentPage.toLocaleString();
+            document.getElementById("totalPageSpan").innerText = totalPages.toLocaleString();
+
+            let startIdx = (totalRecords === 0) ? 0 : (currentPage - 1) * pageSize + 1;
+            let endIdx = Math.min(currentPage * pageSize, totalRecords);
+            document.getElementById("showingRangeSpan").innerText = `${{startIdx.toLocaleString()}} - ${{endIdx.toLocaleString()}}`;
+
+            document.getElementById("btnFirst").disabled = (currentPage === 1);
+            document.getElementById("btnPrev").disabled = (currentPage === 1);
+            document.getElementById("btnNext").disabled = (currentPage === totalPages || totalRecords === 0);
+            document.getElementById("btnLast").disabled = (currentPage === totalPages || totalRecords === 0);
+        }}
+
+        // 僅渲染當前頁面的 250 筆 HTML 節點，徹底解決記憶體與卡死問題
+        function renderTable() {{
+            let tbody = document.getElementById("tableBody");
+            if (filteredData.length === 0) {{
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:#999;">找不到符合條件的資料</td></tr>';
+                return;
+            }}
+
+            let startIdx = (currentPage - 1) * pageSize;
+            let endIdx = Math.min(startIdx + pageSize, filteredData.length);
+            let pageData = filteredData.slice(startIdx, endIdx);
+
+            let htmlRows = pageData.map(row => {{
+                let fname = escapeHtml(row[0]);
+                let srcP = escapeHtml(row[1]);
+                let dstP = escapeHtml(row[2]);
+                let cam = escapeHtml(row[3]);
+                let ext = escapeHtml(row[4]);
+                let cat = escapeHtml(row[5]);
+                let status = escapeHtml(row[6]);
+                let reason = escapeHtml(row[7]);
+                let plugin = escapeHtml(row[8]);
+
+                let statusClass = "status-success";
+                if (status === "略過") statusClass = "status-skip";
+                else if (status === "失敗") statusClass = "status-fail";
+
+                let rowClass = (plugin !== "-") ? "has-plugin-warn" : "";
+
+                return `<tr class="${{rowClass}}">
+                    <td class="font-bold">${{fname}}</td>
+                    <td class="path-cell" title="${{srcP}}">${{srcP}}</td>
+                    <td class="path-cell" title="${{dstP}}">${{dstP}}</td>
+                    <td><span class="cam-badge">${{cam}}</span></td>
+                    <td>${{ext}}</td>
+                    <td>${{cat}}</td>
+                    <td><span class="status-badge ${{statusClass}}">${{status}}</span></td>
+                    <td class="reason-cell" title="${{reason}}">${{reason}}</td>
+                    <td class="plugin-cell" title="${{plugin}}">${{plugin}}</td>
+                </tr>`;
+            }});
+
+            tbody.innerHTML = htmlRows.join('');
+        }}
+
+        function escapeHtml(str) {{
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }}
+    </script>
+</body>
+</html>"""
+    try:
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+    except Exception:
+        pass
+
 # --- 背景執行緒函式 ---
 def threaded_process_images(selected_folders, dest_dir, organize_by_time, normalize_name, separate_edited, copy_video, copy_raw, overwrite, q, stop_event):
     dest_path = Path(dest_dir)
@@ -827,14 +1126,15 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
                 if ext in IGNORED_EXTENSIONS:
                     report_lines.append(f"[排除檔案] {full_src_win_p} | 原因：不處理的副檔名 ({ext})\n")
-                    audit_manifest.append([filename, full_src_win_p, "N/A", ext, "忽略", "略過", f"不處理的副檔名 ({ext})"])
+                    # 順序: [名稱, 來源, 輸出, 相機, 副檔名, 類別, 狀態, 理由, 插件]
+                    audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "忽略", "略過", f"不處理的副檔名 ({ext})", "-"])
                     continue
 
                 if ext in valid_extensions:
                     files.append(Path(dirpath) / filename)
                 else:
                     report_lines.append(f"[略過] {full_src_win_p} | 原因：其他副檔名 ({ext})\n")
-                    audit_manifest.append([filename, full_src_win_p, "N/A", ext, "忽略", "略過", f"其他副檔名 ({ext})"])
+                    audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "忽略", "略過", f"其他副檔名 ({ext})", "-"])
 
     if stop_event.is_set():
         q.put(('status', "🛑 處理已中斷"))
@@ -863,22 +1163,37 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         try: file_size = os.path.getsize(file_path)
         except OSError: file_size = 0
 
+        # 用於記錄該檔案處理過程中的外掛異常訊息
+        captured_warnings = []
+        camera_model = "-"
+
         try:
             ext = file_path.suffix.lower()
             stem = file_path.stem
 
+            # 讀取相機型號同時攔截插件訊息
+            with PluginWarningCapturer() as capturer:
+                camera_model = get_camera_model(file_path)
+            captured_warnings.extend(capturer.get_messages())
+
             clean_stem = stem
             suffix_match = PATTERN_SUFFIX.match(stem)
-            if suffix_match and not PATTERN_PREFORMATTED.match(stem):
+
+            if suffix_match:
                 clean_stem = suffix_match.group(1)
 
             match = PATTERN_PREFORMATTED.match(clean_stem)
+
             if match:
                 year, month = match.group(1), match.group(2)
                 target_name = f"{clean_stem}{ext}"
             else:
                 if organize_by_time or normalize_name:
-                    media_date = get_media_date(file_path)
+                    # 使用攔截器包覆 get_media_date
+                    with PluginWarningCapturer() as capturer:
+                        media_date = get_media_date(file_path)
+                    captured_warnings.extend(capturer.get_messages())
+
                     year = media_date.strftime('%Y')
                     month = media_date.strftime('%m')
                     target_name = f"{media_date.strftime('%Y-%m-%d %H.%M.%S')}{ext}" if normalize_name else f"{clean_stem}{ext}"
@@ -890,24 +1205,37 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                 month_key = f"{year}_{month}"
                 target_dir = dest_path / month_key
                 category = "standard"
+
                 if ext in RAW_EXTENSIONS:
                     target_dir /= "raw"
                     category = "raw"
                 elif ext in VIDEO_EXTENSIONS:
                     target_dir /= "video"
                     category = "video"
-                elif separate_edited and is_media_edited(file_path):
-                    target_dir /= "edited"
-                    category = "edited"
+                elif separate_edited:
+                    # 使用攔截器包覆 is_media_edited
+                    with PluginWarningCapturer() as capturer:
+                        is_edited = is_media_edited(file_path)
+                    captured_warnings.extend(capturer.get_messages())
+                    if is_edited:
+                        target_dir /= "edited"
+                        category = "edited"
             else:
                 month_key = "ALL_MEDIA"
                 target_dir = dest_path / file_path.parent.relative_to(Path(selected_folders[0]).parent)
                 category = "standard"
                 if ext in RAW_EXTENSIONS: category = "raw"
                 elif ext in VIDEO_EXTENSIONS: category = "video"
-                elif separate_edited and is_media_edited(file_path):
-                    target_dir /= "edited"
-                    category = "edited"
+                elif separate_edited:
+                    with PluginWarningCapturer() as capturer:
+                        is_edited = is_media_edited(file_path)
+                    captured_warnings.extend(capturer.get_messages())
+                    if is_edited:
+                        target_dir /= "edited"
+                        category = "edited"
+
+            # 去除重複的警告字句並以分號連接成單一行
+            plugin_msg_str = " ; ".join(dict.fromkeys(captured_warnings)) if captured_warnings else "-"
 
             target_dir.mkdir(parents=True, exist_ok=True)
             target_file = target_dir / target_name
@@ -947,7 +1275,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                 skipped_count += 1
                 processed_size_bytes += file_size
                 report_lines.append(f"[略過] {full_win_path} | 原因: 目標已存在實體相同或品質更佳之同名檔案 ({target_file.name})\n")
-                audit_manifest.append([file_path.name, str(file_path), str(target_file), ext, category, "略過", f"實體相同或目標存在品質/時間更佳檔案 ({target_file.name})"])
+                audit_manifest.append([file_path.name, str(file_path), str(target_file), camera_model, ext, category, "略過", f"實體相同或目標存在品質/時間更佳檔案 ({target_file.name})", plugin_msg_str])
                 q.put(('metrics', (time.time() - start_time, processed_size_bytes)))
                 q.put(('progress', (i + 1) / total_files))
                 continue
@@ -976,8 +1304,13 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                                 'category': category
                             })
 
-                    audit_manifest.append([file_path.name, str(file_path), str(target_file), ext, category, "成功", "複製成功"])
+                    audit_manifest.append([file_path.name, str(file_path), str(target_file), camera_model, ext, category, "成功", "複製成功", plugin_msg_str])
                     q.put(('log', f"[{timestamp}] Processed: {file_path.name} -> {target_file.name}"))
+
+                    # 若該檔案有外掛異常訊息，同步輸出在 UI 日誌提示
+                    if plugin_msg_str != "-":
+                        q.put(('log', f"⚠️ [外掛訊息] {file_path.name}: {plugin_msg_str}"))
+
                     success_count += 1
                     break
                 except (PermissionError, OSError) as e:
@@ -986,8 +1319,9 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
         except Exception as e:
             failed_count += 1
+            plugin_msg_str = " ; ".join(dict.fromkeys(captured_warnings)) if captured_warnings else "-"
             report_lines.append(f"[失敗] {full_win_path} | 原因: 處理發生錯誤 ({str(e)})\n")
-            audit_manifest.append([file_path.name, str(file_path), "N/A", ext, "N/A", "失敗", f"處理異常: {str(e)}"])
+            audit_manifest.append([file_path.name, str(file_path), "N/A", camera_model, ext, "N/A", "失敗", f"處理異常: {str(e)}", plugin_msg_str])
             q.put(('error_log', f"處理 {file_path.name} 發生錯誤: {e}"))
 
         processed_size_bytes += file_size
@@ -1008,7 +1342,8 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             manifest_path = dest_path / "_manifest_audit_report.csv"
             with open(manifest_path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(['檔案名稱', '來源完整路徑', '輸出目標路徑', '副檔名', '處理類別', '最終狀態', '詳細說明/略過原因'])
+                # 新增「相機型號」,「插件訊息」欄位
+                writer.writerow(['檔案名稱', '來源完整路徑', '輸出目標路徑', '相機型號', '副檔名', '處理類別', '最終狀態', '詳細說明/略過原因', '插件訊息'])
                 writer.writerows([
                     [
                         row[0],
@@ -1018,7 +1353,12 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                     ]
                     for row in audit_manifest
                 ])
-            q.put(('log', f"📋 完整掃描報表已匯出至目的地: {manifest_path.name}"))
+            q.put(('log', f"📋 CSV 報表已匯出: {manifest_path.name}"))
+
+            # 同步產出 HTML 總對帳單報表
+            generate_manifest_html(dest_path, audit_manifest)
+            q.put(('log', f"🌐 HTML 報表已匯出: _manifest_audit_report.html"))
+
         except Exception as e:
             q.put(('error_log', f"無法匯出 CSV 對帳單: {e}"))
 
@@ -1031,7 +1371,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                 f.write(f"總計略過: {skipped_count} | 總計失敗: {failed_count}\n")
                 f.write("="*80 + "\n")
                 f.writelines(report_lines)
-            report_msg_append = f"\n\n📄 略過與彙整紀錄已輸出至output根目錄:\n_skip_fail_report.txt\n_manifest_audit_report.csv"
+            report_msg_append = f"\n\n📄 報表已輸出至output根目錄:\n_skip_fail_report.txt\n_manifest_audit_report.csv\n_manifest_audit_report.html"
         except Exception: pass
 
     if stop_event.is_set():
@@ -1043,30 +1383,62 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
     q.put(('reset', None))
 
+# --- 智慧瀏覽資料夾 ---
 def open_folder(path_var, selected_paths=None):
-    if selected_paths:
-        parent_dirs = [os.path.abspath(os.path.dirname(path)) for path in selected_paths]
-        try:
-            path = os.path.commonpath(parent_dirs)
-        except ValueError:
-            path = parent_dirs[0]
+    # 1. 取得目前的所有路徑清單
+    paths = []
+    if selected_paths and len(selected_paths) > 0:
+        paths = list(selected_paths)
     else:
-        path = path_var.get().strip(' "\'')
-        if path.startswith('[') and '] ' in path:
-            path = path.split('] ', 1)[1]
-    if not path: return
-    if ";" in path: path = path.split(";")[0].strip(' "\'')
-    if os.path.isfile(path): path = os.path.dirname(path)
+        raw_str = path_var.get().strip(' "\'')
+        if raw_str.startswith('[') and '] ' in raw_str:
+            raw_str = raw_str.split('] ', 1)[1]
+        paths = [p.strip(' "\'') for p in raw_str.split(';') if p.strip(' "\'')]
 
-    if os.path.exists(path):
-        try:
-            if sys.platform == "win32": os.startfile(path)
-            elif sys.platform == "darwin": subprocess.Popen(["open", path])
-            else: subprocess.Popen(["xdg-open", path])
-        except Exception as e:
-            messagebox.showerror("錯誤", f"無法開啟資料夾: {e}")
+    if not paths:
+        return
+
+    # 2. 依照路徑數量與結構進行邏輯判斷
+    if len(paths) == 1:
+        # 邏輯一：若只有一個資料夾，直接打開它本人
+        target_path = paths[0]
+        if os.path.isfile(target_path):
+            target_path = os.path.dirname(target_path)
     else:
-        messagebox.showwarning("警告", f"資料夾不存在: {path}")
+        # 邏輯二與三：包含多個資料夾，先取得各自的「絕對路徑母目錄」
+        parents = [os.path.abspath(os.path.dirname(p)) for p in paths]
+
+        # 利用 normcase 處理 Windows 磁碟機與路徑大小寫問題，進行實體比對
+        if os.name == 'nt':
+            unique_parents = set(os.path.normcase(p) for p in parents)
+        else:
+            unique_parents = set(parents)
+
+        if len(unique_parents) == 1:
+            # 邏輯二：屬於同一個 parent，打開這個共通的 parent
+            target_path = parents[0]
+        else:
+            # 邏輯三：不屬於同一個 parent (可能人為修改過 .ini)，彈窗提示衝突
+            messagebox.showwarning(
+                "❌ 路徑衝突",
+                "偵測到目前的來源包含多個資料夾，且「不屬於」同一個母目錄！\n\n"
+                "設定檔 (.ini) 可能曾經被手動編輯過，或是輸入了跨路徑的子目錄，系統無法判定欲開啟哪一個外層目錄。"
+            )
+            return
+
+    # 3. 執行開啟動作
+    if os.path.exists(target_path):
+        try:
+            if sys.platform == "win32":
+                os.startfile(target_path)
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", target_path])
+            else:
+                subprocess.Popen(["xdg-open", target_path])
+        except Exception as e:
+            messagebox.showerror("錯誤", f"❌ 無法開啟資料夾: {e}")
+    else:
+        messagebox.showwarning("警告", f"⚠️ 資料夾不存在: {target_path}")
 
 # --- 精巧統計對話框 ---
 class ModernMessageBox(ctk.CTkToplevel):
@@ -1131,7 +1503,7 @@ class ModernMessageBox(ctk.CTkToplevel):
                                   fg_color="#2980B9", hover_color="#1F618D",
                                   command=lambda p=h_path: webbrowser.open(p.as_uri())).pack(side="top", fill="x", pady=4, padx=2)
 
-# --- 彈窗勾選子目錄介面 (套用莫蘭迪色彩與對齊校正) ---
+# --- 彈窗勾選子目錄介面 ---
 class FolderSelectDialog(ctk.CTkToplevel):
     def __init__(self, parent, initial_dir, callback, theme_colors=None, allow_multiple=True):
         super().__init__(parent)
@@ -1590,8 +1962,6 @@ class ImageOrganizerAppModern:
 
         dest = self.dest_var.get().strip(' "\'')
         if not self.selected_src_folders:
-            # manual_src = self.src_var.get().strip(' "\'')
-            # if os.path.exists(manual_src): self.selected_src_folders = [manual_src]
             messagebox.showwarning("警告", "請先使用瀏覽按鈕選取來源目錄！")
             return
 

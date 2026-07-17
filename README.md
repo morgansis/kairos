@@ -35,30 +35,47 @@ Kairos 是為創作者設計的 Windows 桌面媒體整理工具（Media Organiz
 - `assets/images/`：非執行期的專案圖片資源。
 - `dist/`：本機產生的發布檔，未納入 Git 追蹤。
 
+
+## 執行前先安裝套件
+
+為取得完整功能，請先安裝以下 Python 套件：
+
+```powershell
+python3 -m pip install customtkinter
+python3 -m pip install exifread
+python3 -m pip install pillow
+python3 -m pip install pillow-heif
+python3 -m pip install hachoir
+python3 -m pip install reverse_geocoder
+```
+
+另外，`exiftool` 為外部工具（非 pip 套件），請另外安裝並加入系統 `PATH`（供 HEIC GPS fallback 使用）。
+
 ## 從原始碼執行
 
 ```powershell
-python3.exe src\kairos\main.py
+python3 src\kairos\main.py
 ```
+
 
 ## 發布 Windows 執行檔
 
 先安裝 PyInstaller：
 
 ```powershell
-python3.exe -m pip install pyinstaller
+python3 -m pip install pyinstaller
 ```
 
 目前專案使用 `src` 結構；請在 repository 根目錄執行以下指令。它會建立單一、無主控台視窗的 `Kairos.exe`，並把視窗圖示一併包入程式：
 
 ```powershell
-python3.exe -m PyInstaller --noconsole --onefile --icon=src\kairos\resources\icon.ico --add-data "src\kairos\resources\icon.ico;resources" --name="Kairos" --distpath dist src\kairos\main.py
+python3 -m PyInstaller --noconsole --onefile --icon=src\kairos\resources\icon.ico --add-data "src\kairos\resources\icon.ico;resources" --name="Kairos" --distpath dist src\kairos\main.py
 ```
 
 若檔案位於原始的平面結構（`icon.ico` 與 `main.py` 同層），可使用下列指令：
 
 ```powershell
-python3.exe -m PyInstaller --noconsole --onefile --icon=icon.ico --add-data "icon.ico;." --name="Kairos" main.py
+python3 -m PyInstaller --noconsole --onefile --icon=icon.ico --add-data "icon.ico;resources" --name="Kairos" main.py
 ```
 
 完成後的執行檔位於 `dist/Kairos.exe`。PyInstaller 產生的 `build/`、`dist/` 與 `.spec` 檔已由 `.gitignore` 排除。

@@ -1,6 +1,6 @@
 """
 ================================================================================
-媒體檔案自動化整理與劇院級檢視工具 (Media Organizer Pro) - v2026-07-13
+媒體檔案自動化整理與劇院級檢視工具 (Media Organizer Pro) - v2026-07-17
 ================================================================================
 Designed for creators, this tool provides safe, lossless media archiving
 with millisecond burst protection, intelligent deduplication, and a full-screen
@@ -18,23 +18,22 @@ interactive lightbox experience.
   2. 毫秒級連拍保護與物理去重 (Smart Burst & Duplicate Protection)：
      - 物理實體過濾：在處理前會自動進行檔案大小 (Bytes) 與首尾區塊 (Chunks) 內容對比，
        若確認為完全相同的實體檔案則直接優雅略過，杜絕重複執行時產生冗餘的 `-1` 檔案。
-     - 毫秒連拍辨識：透過讀取 EXIF 亞秒/毫秒 (SubSecTimeOriginal) 與相機原始序號，
-       自動區分「0.1 秒內的連續快門照片」與「同一張照片的二次裁切/修圖版本」。連拍畫面
-       會自動掛載 `-1`、`-2` 序號和諧共存，絕不誤蓋。
+     - 毫秒連拍辨識：透過 EXIF 亞秒/毫秒 (SubSecTimeOriginal) + 相機序號 + 小於 1 秒間隔，
+       區分連拍序列與同秒衝突；同秒連拍衝突會優先掛上三位毫秒後綴，避免前後秒邊界被誤判。
   3. 彈性時間分類與更新取代機制：
      - 支援將檔名正規化為「YYYY-MM-DD HH.MM.SS」標準格式，並自動依年份與月份建立資料夾。
-     - 支援將修圖軟體 (Photoshop/Lightroom 等) 導出的已編修照片自動分離至 `edited/` 目錄。
-     - 若勾選「強制覆蓋」，當遇到同名非連拍的二次修圖作品時，系統會自動比對修改時間與
-       檔案特徵，保留最新、品質最佳的版本。
-  4. 外掛異常精準攔截與對帳單整合：
+     - 支援彈性「地理位置解析開關」，關閉時極速掃描；開啟時將地圖資訊直接整合進月份視覺報表。
+     - 若勾選「強制覆蓋」，同毫秒重複只保留一張在上層（名稱正規化），其餘移至 `candidate`
+       並以 `-1/-2...` 尾綴保留；非連拍同名衝突則依修改時間保留較新版本。
+  4. 外掛異常精準攔截與報表整合：
      - 自動捕捉 exifread、Pillow、hachoir 等第三方解析外掛所產生的警告與錯誤，
-       直接關聯至當前處理檔案並同步整合進 CSV/HTML 對帳單中的「插件訊息」欄位，不再繁雜刷屏。
+       直接關聯至當前處理檔案並同步整合進 CSV/HTML 報表中的「插件訊息」欄位，不再繁雜刷屏。
 
 二、 劇院級互動 HTML 報告與懸浮燈箱 (Interactive Report & Overlay Lightbox)：
-  1. 根目錄集中式報告與免外掛總對帳單：
+  1. 根目錄集中式報告與免外掛總報表
      - 各月份處理結果會直接於「輸出根目錄」生成單一 HTML 視覺化報告（如 2026_04_media_report.html），
-       內嵌 Intersection Observer 延遲載入 (Lazy Load) 技術，萬張照片也順暢不卡頓。
-     - 同時產出 `_manifest_audit_report.html` 免外掛互動式對帳單，支援關鍵字搜尋與分類過濾。
+       內嵌 Intersection Observer 延遲載入 (Lazy Load) 技術與地圖跳轉按鈕，萬張照片也順暢不卡頓。
+    - 同時產出 `_index.html` 免外掛互動式總報表，支援關鍵字搜尋與分類過濾。
   2. 究極滿版懸浮燈箱 (100vw / 100vh Overlay Lightbox)：
      - 點擊照片或影片即進入全螢幕燈箱，畫面直接擴展至瀏覽器視窗的 100% 極限滿版，絕不浪費螢幕空間。
      - 控制資訊（張數、檔名、類別、刪除按鈕與箭頭）採取「半透明漸層懸浮列 (Overlay)」設計，
@@ -44,10 +43,10 @@ interactive lightbox experience.
      - 瀏覽器端提供「🗑️ 標記為待刪除」功能。為突破瀏覽器本地沙盒安全限制，報告上方提供
        「📋 複製 Windows 刪除指令」與「📋 複製 macOS/Linux 刪除指令」一鍵按鈕。
      - 點擊後即可將對應的 `del /f /q` 或 `rm -f` 終端機語法複製到剪貼簿，直接打開終端機
-       貼上即可一鍵清除所有標記的廢片，同時保留 .bat / .sh / .txt 下載備援。
+       貼上即可一鍵清除所有標記的廢片。
 
 三、 現代化介面與安全中斷機制：
-  1. 莫蘭迪美學 UI：全系列視窗與彈窗皆完美整合晨霧灰藍、乾燥玫瑰、大地岩石等專業配色，
+  1. 莫蘭迪美學 UI：全系列視窗與彈窗皆完美整合晨霧灰藍、乾燥玫瑰、鼠尾草綠等專業配色，
      字體間距嚴格調校對齊，提供視覺舒適的深層體驗。
   2. 精巧計數器與報告啟動器：處理完畢後，系統會彈出視覺俐落的精緻通知視窗，底端自動產出
      「🌐 開啟 [月份] 報告」動態按鈕，點擊立刻調用系統預設瀏覽器開啟檢視。
@@ -65,6 +64,7 @@ import html
 import time
 import json
 import queue
+import ctypes
 import shutil
 import signal
 import hashlib
@@ -102,20 +102,37 @@ try:
 except ImportError:
     EXIFREAD_AVAILABLE = False
 
-# 2. PIL/Pillow (處理圖片格式)
+# 2. PIL/Pillow (處理照片)
 try:
     from PIL import Image
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
 
-# 3. Hachoir (處理影片 Metadata)
+# 3. Hachoir (處理影片)
 try:
     from hachoir.parser import createParser
     from hachoir.metadata import extractMetadata
     HACHOIR_AVAILABLE = True
 except ImportError:
     HACHOIR_AVAILABLE = False
+
+# 4. Reverse Geocoder (離線地理解析)
+try:
+    import reverse_geocoder as rg
+    RG_AVAILABLE = True
+except ImportError:
+    RG_AVAILABLE = False
+
+# 5. Pillow-heif (處理照片)
+try:
+    import pillow_heif
+    PILLOW_HEIF_AVAILABLE = True
+except ImportError:
+    PILLOW_HEIF_AVAILABLE = False
+
+# 6. Exiftool (處理照片)
+EXIFTOOL_AVAILABLE = shutil.which("exiftool") is not None
 
 # ===================== 莫蘭迪配色設定 =====================
 THEMES = {
@@ -129,7 +146,7 @@ THEMES = {
         "SUB": "#B8A3A0", "STOP": "#C99B96", "TEXT": "#4E4848",
         "LABEL": "#777777", "BORDER": "#EBE4E2", "PROGRESS": "#D4B9B5"
     },
-    "大地岩石 (自然)": {
+    "鼠尾草綠 (自然)": {
         "MAIN": "#8A9A8A", "HOVER": "#758575", "BG": "#F5F6F4",
         "SUB": "#A3B3A3", "STOP": "#C9A696", "TEXT": "#4E544E",
         "LABEL": "#777777", "BORDER": "#E4E6E4", "PROGRESS": "#B8C4B8"
@@ -139,7 +156,60 @@ THEMES = {
 # 預設啟動色系
 DEFAULT_THEME_NAME = "晨霧灰藍 (沈穩)"
 # ===================== 程式設定 =====================
-VERSION = "2026-07-13"
+VERSION = "2026-07-17"
+
+# ===================== UI tuning constants =====================
+UI_FONT_FAMILY = "Calibri"
+UI_TITLE_FONT_SIZE = 24
+UI_APP_FONT_SIZE = 15
+UI_BUTTON_FONT_SIZE = 20
+UI_SUBTITLE_FONT_SIZE = 11
+UI_STATUS_FONT_SIZE = 14
+UI_SUBTITLE_BUILD_HEIGHT = 24
+UI_SUBTITLE_LINE_HEIGHT = 17
+UI_ROW_HEIGHT = 30
+UI_LOG_FONT_FAMILY = "Consolas"
+UI_LOG_FONT_SIZE = 12
+
+UI_MAIN_WINDOW_GEOMETRY = "1600x900"
+UI_MAIN_WINDOW_MIN_WIDTH = 1280
+UI_MAIN_WINDOW_MIN_HEIGHT = 720
+UI_DIALOG_FOLDER_GEOMETRY = "640x540"
+UI_DIALOG_FOLDER_MIN_WIDTH = 480
+UI_DIALOG_FOLDER_MIN_HEIGHT = 380
+UI_DIALOG_MSGBOX_WIDTH = 420
+UI_DIALOG_MSGBOX_MIN_WIDTH = 400
+UI_DIALOG_MSGBOX_MIN_HEIGHT = 240
+UI_DIALOG_MSGBOX_MAX_WIDTH = 600
+UI_DIALOG_MSGBOX_MAX_HEIGHT = 720
+UI_DIALOG_MSGBOX_BASE_HEIGHT = 280
+UI_DIALOG_MSGBOX_ROW_HEIGHT = 50
+UI_DIALOG_MSGBOX_DYNAMIC_MAX_HEIGHT = 560
+
+UI_FONT_SIZE_MSGBOX_ICON = 28
+UI_FONT_SIZE_MSGBOX_TITLE = 16
+UI_FONT_SIZE_MSGBOX_BODY = 14
+UI_FONT_SIZE_MSGBOX_MAIN_BTN = 14
+UI_FONT_SIZE_MSGBOX_REPORT_BTN = 13
+UI_MSGBOX_WRAP_LENGTH = 360
+UI_MSGBOX_MAIN_BTN_HEIGHT = 38
+UI_MSGBOX_REPORT_BTN_HEIGHT = 36
+UI_MSGBOX_REPORT_SCROLL_HEIGHT = 180
+
+UI_FONT_SIZE_FOLDER_TITLE = 15
+UI_FONT_SIZE_FOLDER_CHECK = 15
+UI_FONT_SIZE_FOLDER_ACTION = 14
+UI_FONT_SIZE_FOLDER_BOTTOM_BTN = 16
+UI_FOLDER_ACTION_BTN_WIDTH = 90
+UI_FOLDER_ACTION_BTN_HEIGHT = 32
+UI_FOLDER_BOTTOM_BTN_HEIGHT = 42
+
+UI_SMALL_BTN_WIDTH = 50
+UI_THEME_MENU_WIDTH = 160
+UI_PROGRESS_HEIGHT = 14
+UI_LOGBOX_HEIGHT = 150
+UI_START_BTN_HEIGHT = 55
+UI_START_MAXIMIZED = True
 
 # 1. 判斷是否為打包後的執行檔
 if getattr(sys, 'frozen', False):
@@ -161,10 +231,22 @@ DATE_TIME_ORIGINAL_TAG = 36867
 STANDARD_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.tif', '.tiff', '.webp', '.heic', '.heif'}
 RAW_EXTENSIONS = {'.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.orf', '.rw2', '.psd'}
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v', '.3gp', '.mts', '.m2ts', '.mpg'}
+GEO_LOOKUP_EXTENSIONS = {'.jpg', '.jpeg', '.tif', '.tiff', '.heic', '.heif'}
 EXCLUDE_DIR_KEYWORDS = ['helper.lrdata', 'previews.lrdata', 'smart previews.lrdata', 'lrcat-data', 'System Volume Information', '$RECYCLE.BIN']
 IGNORED_EXTENSIONS = ['.lrcat', '.lrdata', '.tmp', '.ds_store', '.db', '.xls', '.xlsx', '.doc', '.docx', '.pdf']
+PLACEHOLDER = "-"
 
 TIMESTAMP_STEM_RE = re.compile(r'^(?P<base>\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2})(?P<suffix>-(?:\d{1,6}(?:-\d+)?|u\d+|c\d+))?$')
+EXIF_DATETIME_FORMAT = '%Y:%m:%d %H:%M:%S'
+EXIF_DATETIME_TAG_KEYS = ('EXIF DateTimeOriginal', 'EXIF DateTimeDigitized', 'Image DateTime')
+EXIF_SUBSEC_TAG_KEYS = ('EXIF SubSecTimeOriginal', 'EXIF SubSecTime', 'EXIF SubSecTimeDigitized')
+EXIF_SERIAL_TAG_KEYS = (
+    'EXIF BodySerialNumber',
+    'Image BodySerialNumber',
+    'MakerNote SerialNumber',
+    'EXIF SerialNumber',
+)
+CAPTURE_META_CACHE = {}
 # ===================================================
 
 class PluginWarningCapturer:
@@ -236,6 +318,124 @@ def format_time(seconds):
         return f"{h:02d}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
 
+def _hex_to_colorref(hex_color):
+    color = str(hex_color).lstrip('#')
+    if len(color) != 6:
+        return None
+    r = int(color[0:2], 16)
+    g = int(color[2:4], 16)
+    b = int(color[4:6], 16)
+    return (b << 16) | (g << 8) | r
+
+def _titlebar_text_hex_for_bg(hex_color):
+    color = str(hex_color).lstrip('#')
+    if len(color) != 6:
+        return "#FFFFFF"
+    r = int(color[0:2], 16)
+    g = int(color[2:4], 16)
+    b = int(color[4:6], 16)
+    # Relative luminance heuristic
+    luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return "#000000" if luminance > 170 else "#FFFFFF"
+
+def apply_windows_titlebar_theme(window, caption_hex):
+    """Apply Windows title-bar caption/text color (best effort; no-op on non-Windows)."""
+    if sys.platform != "win32":
+        return
+    try:
+        window.update_idletasks()
+        hwnd = window.winfo_id()
+        caption_color = _hex_to_colorref(caption_hex)
+        text_color = _hex_to_colorref(_titlebar_text_hex_for_bg(caption_hex))
+        if caption_color is None or text_color is None:
+            return
+        DWMWA_BORDER_COLOR = 34
+        DWMWA_CAPTION_COLOR = 35
+        DWMWA_TEXT_COLOR = 36
+        value_caption = ctypes.c_int(caption_color)
+        value_text = ctypes.c_int(text_color)
+        value_border = ctypes.c_int(caption_color)
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ctypes.byref(value_caption), ctypes.sizeof(value_caption))
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_TEXT_COLOR, ctypes.byref(value_text), ctypes.sizeof(value_text))
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, DWMWA_BORDER_COLOR, ctypes.byref(value_border), ctypes.sizeof(value_border))
+    except Exception:
+        pass
+
+def _copy_windows_icon_from_parent(window, parent_window):
+    """Copy title-bar icons from parent window handle (Windows only)."""
+    if sys.platform != "win32" or parent_window is None:
+        return False
+    try:
+        user32 = ctypes.windll.user32
+        WM_GETICON = 0x007F
+        WM_SETICON = 0x0080
+        ICON_SMALL = 0
+        ICON_BIG = 1
+        GCLP_HICONSM = -34
+        GCLP_HICON = -14
+
+        get_class_long_ptr = getattr(user32, "GetClassLongPtrW", None)
+        if get_class_long_ptr is None:
+            get_class_long_ptr = user32.GetClassLongW
+
+        parent_hwnd = parent_window.winfo_id()
+        child_hwnd = window.winfo_id()
+
+        hicon_small = user32.SendMessageW(parent_hwnd, WM_GETICON, ICON_SMALL, 0)
+        hicon_big = user32.SendMessageW(parent_hwnd, WM_GETICON, ICON_BIG, 0)
+        if not hicon_small:
+            hicon_small = get_class_long_ptr(parent_hwnd, GCLP_HICONSM)
+        if not hicon_big:
+            hicon_big = get_class_long_ptr(parent_hwnd, GCLP_HICON)
+
+        if hicon_small:
+            user32.SendMessageW(child_hwnd, WM_SETICON, ICON_SMALL, hicon_small)
+        if hicon_big:
+            user32.SendMessageW(child_hwnd, WM_SETICON, ICON_BIG, hicon_big)
+        return bool(hicon_small or hicon_big)
+    except Exception:
+        return False
+
+def apply_window_icon(window, icon_path=None, inherit_from=None):
+    """Best-effort icon apply for Tk/CTk windows with delayed retries."""
+    if icon_path is None:
+        icon_path = resource_path("icon.ico")
+
+    def _set_once(path=icon_path):
+        has_path_icon = bool(path and os.path.exists(path))
+        try:
+            if has_path_icon:
+                window.iconbitmap(path)
+                return True
+        except Exception:
+            pass
+        try:
+            if has_path_icon:
+                window.wm_iconbitmap(path)
+                return True
+        except Exception:
+            pass
+        if _copy_windows_icon_from_parent(window, inherit_from):
+            return True
+        try:
+            if inherit_from is not None:
+                parent_icon = inherit_from.iconbitmap()
+                if parent_icon:
+                    window.iconbitmap(parent_icon)
+                    return True
+        except Exception:
+            pass
+        return False
+
+    applied = _set_once()
+    if not applied:
+        for delay in (80, 220, 480):
+            try:
+                window.after(delay, lambda p=icon_path: _set_once(p))
+            except Exception:
+                pass
+    return applied
+
 def is_identical_file(src_path, target_path):
     """先快速比對，再以完整 SHA-256 確認內容相同；絕不以片段比對作為略過依據。"""
     try:
@@ -277,6 +477,20 @@ def unique_path(directory, stem, ext):
         candidate = directory / f"{stem}-{counter}{ext}"
         counter += 1
     return candidate
+
+def unique_indexed_path(directory, stem, ext, start=1):
+    """Always add numeric suffix starting from `start` (e.g. -1, -2, ...)."""
+    counter = max(int(start), 1)
+    candidate = directory / f"{stem}-{counter}{ext}"
+    while candidate.exists():
+        counter += 1
+        candidate = directory / f"{stem}-{counter}{ext}"
+    return candidate
+
+def candidate_path_for(month_dir, stem, ext):
+    candidate_dir = month_dir / 'candidate'
+    candidate_dir.mkdir(parents=True, exist_ok=True)
+    return unique_indexed_path(candidate_dir, stem, ext, start=1)
 
 def get_media_date(file_path):
     ext = Path(file_path).suffix.lower()
@@ -346,65 +560,378 @@ def get_camera_model(file_path):
                 pass
     return "-"
 
-def is_media_edited(file_path):
-    ext = Path(file_path).suffix.lower()
+# === 新增：全域座標快取字典，避免對同一景點重複進行耗時的空間樹搜尋 ===
+GEO_COORD_CACHE = {}
 
-    if ext in RAW_EXTENSIONS:
-        return False
+def _deprecated_get_exif_location(file_path, log_callback=None):
+    """讀取經緯度並回傳 (城市/行政區文字地名, Google Maps 網址, 狀態, 失敗原因)。"""
+    display_path = format_display_path(file_path)
 
-    if ext in STANDARD_EXTENSIONS and EXIFREAD_AVAILABLE:
+    def geo_log(reason, detail=None):
+        if not log_callback:
+            return
+        msg = f"[GEO] {display_path} | {reason}"
+        if detail:
+            msg += f" | {detail}"
         try:
-            with open(file_path, 'rb') as f:
-                tags = exifread.process_file(f, details=False)
-                if 'Image Software' in tags:
-                    software = str(tags['Image Software']).lower()
-                    edited_keywords = ['photoshop', 'lightroom', 'snapseed', 'vsco', 'apple photos', 'gimp']
-                    if any(kw in software for kw in edited_keywords):
-                        return True
-
-                if 'EXIF DateTimeOriginal' in tags and 'Image DateTime' in tags:
-                    dt_orig = datetime.strptime(str(tags['EXIF DateTimeOriginal']), '%Y:%m:%d %H:%M:%S')
-                    dt_mod = datetime.strptime(str(tags['Image DateTime']), '%Y:%m:%d %H:%M:%S')
-                    if abs((dt_mod - dt_orig).total_seconds()) > 60:
-                        return True
+            log_callback(msg)
         except Exception:
             pass
-    elif ext in VIDEO_EXTENSIONS and HACHOIR_AVAILABLE:
+
+    ext = Path(file_path).suffix.lower()
+    if ext not in STANDARD_EXTENSIONS:
+        reason = "SKIP: EXIF GPS not supported for this file type"
+        geo_log(reason, ext)
+        return "-", "-", "skip", reason
+
+    if not EXIFREAD_AVAILABLE:
+        reason = "FAIL: exifread unavailable"
+        geo_log(reason)
+        return "-", "-", "fail", reason
+
+    try:
+        with open(file_path, 'rb') as f:
+            tags = exifread.process_file(f, details=False)
+
+        if 'GPS GPSLatitude' not in tags or 'GPS GPSLongitude' not in tags:
+            reason = "FAIL: missing GPS EXIF (GPSLatitude/GPSLongitude)"
+            geo_log(reason)
+            return "-", "-", "fail", reason
+
+        def dms_to_dec(dms_tag, ref_tag):
+            values = dms_tag.values
+            d = float(values[0].num) / float(values[0].den)
+            m = float(values[1].num) / float(values[1].den)
+            s = float(values[2].num) / float(values[2].den)
+            dec = d + (m / 60.0) + (s / 3600.0)
+            if ref_tag in ['S', 'W']:
+                dec = -dec
+            return dec
+
+        lat_ref = str(tags.get('GPS GPSLatitudeRef', 'N'))
+        lon_ref = str(tags.get('GPS GPSLongitudeRef', 'E'))
+        lat = dms_to_dec(tags['GPS GPSLatitude'], lat_ref)
+        lon = dms_to_dec(tags['GPS GPSLongitude'], lon_ref)
+
+        map_url = f"https://www.google.com/maps?q={lat:.4f},{lon:.4f}"
+        loc_name = "-"
+
+        if not RG_AVAILABLE:
+            reason = "FAIL: reverse_geocoder unavailable"
+            geo_log(reason)
+            return loc_name, map_url, "fail", reason
+
+        coord_key = (round(lat, 3), round(lon, 3))
+        if coord_key in GEO_COORD_CACHE:
+            return GEO_COORD_CACHE[coord_key], map_url, "pass", None
+
         try:
-            parser = createParser(str(file_path))
-            if parser:
-                with parser:
-                    metadata = extractMetadata(parser)
-                    if metadata and metadata.has("producer"):
-                        producer = str(metadata.get("producer")).lower()
-                        vid_edited_keywords = ['premiere', 'lavf', 'handbrake', 'final cut', 'imovie']
-                        if any(kw in producer for kw in vid_edited_keywords): return True
-        except Exception: pass
-    return False
+            res = rg.search((lat, lon))
+            if res and len(res) > 0:
+                info = res[0]
+                c = info.get('cc', '')
+                a1 = info.get('admin1', '')
+                a2 = info.get('name', '')
+                parts = [p for p in [c, a1] if p]
+                loc_str = " - ".join(parts)
+                loc_name = f"{loc_str} ({a2})" if (loc_str and a2) else (loc_str or a2 or "-")
+                GEO_COORD_CACHE[coord_key] = loc_name
+                return loc_name, map_url, "pass", None
+
+            reason = "FAIL: rg.search returned no result"
+            geo_log(reason)
+            return loc_name, map_url, "fail", reason
+        except Exception as e:
+            reason = f"ERROR: rg.search exception | {repr(e)}"
+            geo_log("ERROR: rg.search exception", repr(e))
+            return loc_name, map_url, "fail", reason
+    except Exception as e:
+        reason = f"ERROR: EXIF parse exception | {repr(e)}"
+        geo_log("ERROR: EXIF parse exception", repr(e))
+        return "-", "-", "fail", reason
+
+def _geo_ratio_to_float(value):
+    try:
+        if hasattr(value, 'num') and hasattr(value, 'den'):
+            den = float(value.den) if float(value.den) != 0 else 1.0
+            return float(value.num) / den
+        if isinstance(value, tuple) and len(value) == 2:
+            den = float(value[1]) if float(value[1]) != 0 else 1.0
+            return float(value[0]) / den
+        return float(value)
+    except Exception:
+        return None
+
+def _geo_dms_to_decimal(dms_values, ref_tag):
+    try:
+        if len(dms_values) < 3:
+            return None
+        d = _geo_ratio_to_float(dms_values[0])
+        m = _geo_ratio_to_float(dms_values[1])
+        s = _geo_ratio_to_float(dms_values[2])
+        if d is None or m is None or s is None:
+            return None
+        dec = d + (m / 60.0) + (s / 3600.0)
+        if str(ref_tag).upper() in ['S', 'W']:
+            dec = -dec
+        return dec
+    except Exception:
+        return None
+
+def _geo_extract_with_exifread(file_path):
+    if not EXIFREAD_AVAILABLE:
+        return None, None, "FAIL: exifread unavailable"
+    try:
+        with open(file_path, 'rb') as f:
+            tags = exifread.process_file(f, details=False)
+        if 'GPS GPSLatitude' not in tags or 'GPS GPSLongitude' not in tags:
+            return None, None, "FAIL: missing GPS EXIF (GPSLatitude/GPSLongitude)"
+        lat_ref = str(tags.get('GPS GPSLatitudeRef', 'N'))
+        lon_ref = str(tags.get('GPS GPSLongitudeRef', 'E'))
+        lat = _geo_dms_to_decimal(tags['GPS GPSLatitude'].values, lat_ref)
+        lon = _geo_dms_to_decimal(tags['GPS GPSLongitude'].values, lon_ref)
+        if lat is None or lon is None:
+            return None, None, "FAIL: invalid GPS EXIF DMS values"
+        return lat, lon, None
+    except Exception as e:
+        return None, None, f"ERROR: EXIF parse exception | {repr(e)}"
+
+def _geo_extract_with_exiftool(file_path):
+    exiftool_path = shutil.which("exiftool")
+    if not exiftool_path:
+        return None, None, "FAIL: exiftool unavailable"
+    try:
+        cp = subprocess.run(
+            [exiftool_path, "-j", "-n", "-GPSLatitude", "-GPSLongitude", str(file_path)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+        )
+        if cp.returncode != 0:
+            return None, None, f"ERROR: exiftool failed | {cp.stderr.strip()}"
+        payload = json.loads(cp.stdout or "[]")
+        if not payload or not isinstance(payload, list):
+            return None, None, "FAIL: exiftool returned empty payload"
+        row = payload[0]
+        lat = row.get("GPSLatitude")
+        lon = row.get("GPSLongitude")
+        if lat is None or lon is None:
+            return None, None, "FAIL: exiftool returned no GPS fields"
+        return float(lat), float(lon), None
+    except Exception as e:
+        return None, None, f"ERROR: exiftool exception | {repr(e)}"
+
+def _geo_extract_with_pillow_heif(file_path):
+    if not PIL_AVAILABLE:
+        return None, None, "FAIL: Pillow unavailable"
+    try:
+        import pillow_heif
+    except Exception:
+        return None, None, "FAIL: pillow-heif unavailable"
+
+    try:
+        pillow_heif.register_heif_opener()
+        with Image.open(file_path) as img:
+            exif = img.getexif()
+            gps_ifd = exif.get_ifd(0x8825) if hasattr(exif, "get_ifd") else None
+            if gps_ifd is None:
+                gps_ifd = exif.get(34853) if exif else None
+            if not gps_ifd:
+                return None, None, "FAIL: missing GPS EXIF in pillow-heif metadata"
+            lat_values = gps_ifd.get(2)
+            lon_values = gps_ifd.get(4)
+            lat_ref = gps_ifd.get(1, 'N')
+            lon_ref = gps_ifd.get(3, 'E')
+            if not lat_values or not lon_values:
+                return None, None, "FAIL: missing GPS EXIF (GPSLatitude/GPSLongitude)"
+            lat = _geo_dms_to_decimal(lat_values, lat_ref)
+            lon = _geo_dms_to_decimal(lon_values, lon_ref)
+            if lat is None or lon is None:
+                return None, None, "FAIL: invalid GPS EXIF DMS values"
+            return lat, lon, None
+    except Exception as e:
+        return None, None, f"ERROR: pillow-heif parse exception | {repr(e)}"
+
+def get_exif_location(file_path, log_callback=None):
+    """Read coordinates and return (location text, Google Maps URL, status, fail reason)."""
+    display_path = format_display_path(file_path)
+
+    def geo_log(reason, detail=None):
+        if not log_callback:
+            return
+        msg = f"[GEO] {display_path} | {reason}"
+        if detail:
+            msg += f" | {detail}"
+        try:
+            log_callback(msg)
+        except Exception:
+            pass
+
+    ext = Path(file_path).suffix.lower()
+    if ext not in STANDARD_EXTENSIONS:
+        reason = "SKIP: EXIF GPS not supported for this file type"
+        geo_log(reason, ext)
+        return "-", "-", "skip", reason
+
+    lat, lon, reason = _geo_extract_with_exifread(file_path)
+    if (lat is None or lon is None) and ext in {'.heic', '.heif'}:
+        if reason:
+            geo_log(f"{reason} | fallback: pillow-heif")
+        lat, lon, reason_pillow = _geo_extract_with_pillow_heif(file_path)
+        if lat is None or lon is None:
+            if reason_pillow:
+                geo_log(f"{reason_pillow} | fallback: exiftool")
+            lat, lon, reason_exiftool = _geo_extract_with_exiftool(file_path)
+            reason = reason_exiftool or reason_pillow or reason
+        else:
+            reason = None
+
+    if lat is None or lon is None:
+        reason = reason or "FAIL: missing GPS EXIF (GPSLatitude/GPSLongitude)"
+        geo_log(reason)
+        return "-", "-", "fail", reason
+
+    map_url = f"https://www.google.com/maps?q={lat:.4f},{lon:.4f}"
+    loc_name = "-"
+    if not RG_AVAILABLE:
+        reason = "FAIL: reverse_geocoder unavailable"
+        geo_log(reason)
+        return loc_name, map_url, "fail", reason
+
+    coord_key = (round(lat, 3), round(lon, 3))
+    if coord_key in GEO_COORD_CACHE:
+        return GEO_COORD_CACHE[coord_key], map_url, "pass", None
+
+    try:
+        res = rg.search((lat, lon))
+        if res and len(res) > 0:
+            info = res[0]
+            c = info.get('cc', '')
+            a1 = info.get('admin1', '')
+            a2 = info.get('name', '')
+            parts = [p for p in [c, a1] if p]
+            loc_str = " - ".join(parts)
+            loc_name = f"{loc_str} ({a2})" if (loc_str and a2) else (loc_str or a2 or "-")
+            GEO_COORD_CACHE[coord_key] = loc_name
+            return loc_name, map_url, "pass", None
+        reason = "FAIL: rg.search returned no result"
+        geo_log(reason)
+        return loc_name, map_url, "fail", reason
+    except Exception as e:
+        reason = f"ERROR: rg.search exception | {repr(e)}"
+        geo_log("ERROR: rg.search exception", repr(e))
+        return loc_name, map_url, "fail", reason
 
 def get_exif_subsec(file_path):
-    if EXIFREAD_AVAILABLE and Path(file_path).suffix.lower() in STANDARD_EXTENSIONS:
+    return get_capture_meta(file_path).get('subsec_raw')
+
+def _read_exif_capture_fields(file_path):
+    result = {
+        'capture_dt': None,
+        'subsec_raw': None,
+        'subsec_ms': None,
+        'serial': PLACEHOLDER,
+        'capture_epoch': None,
+        'has_precise_ms': False,
+    }
+    ext = Path(file_path).suffix.lower()
+    if not (EXIFREAD_AVAILABLE and ext in STANDARD_EXTENSIONS):
+        return result
+
+    try:
+        with open(file_path, 'rb') as f:
+            tags = exifread.process_file(f, details=False)
+    except Exception:
+        return result
+
+    dt_text = None
+    for key in EXIF_DATETIME_TAG_KEYS:
+        if key in tags:
+            value = str(tags[key]).strip()
+            if value:
+                dt_text = value
+                break
+    if dt_text:
         try:
-            with open(file_path, 'rb') as f:
-                tags = exifread.process_file(f, details=False)
-                for key in ['EXIF SubSecTimeOriginal', 'EXIF SubSecTime', 'EXIF SubSecTimeDigitized']:
-                    if key in tags:
-                        return str(tags[key]).strip()
+            result['capture_dt'] = datetime.strptime(dt_text, EXIF_DATETIME_FORMAT)
         except Exception:
-            pass
-    return None
+            result['capture_dt'] = None
+
+    for key in EXIF_SUBSEC_TAG_KEYS:
+        if key in tags:
+            value = str(tags[key]).strip()
+            if value:
+                result['subsec_raw'] = value
+                result['subsec_ms'] = normalized_subsec(value)
+                break
+
+    for key in EXIF_SERIAL_TAG_KEYS:
+        if key in tags:
+            value = str(tags[key]).strip()
+            if value:
+                result['serial'] = value
+                break
+
+    return result
+
+def get_capture_meta(file_path):
+    cache_key = os.path.normcase(os.path.abspath(str(file_path)))
+    if cache_key in CAPTURE_META_CACHE:
+        return CAPTURE_META_CACHE[cache_key]
+
+    meta = _read_exif_capture_fields(file_path)
+    if meta['capture_dt'] is None:
+        try:
+            meta['capture_dt'] = datetime.fromtimestamp(os.path.getmtime(file_path))
+        except Exception:
+            meta['capture_dt'] = None
+
+    if meta['capture_dt'] is not None:
+        epoch = meta['capture_dt'].timestamp()
+        if meta['subsec_ms'] is not None:
+            epoch += (int(meta['subsec_ms']) / 1000.0)
+            meta['has_precise_ms'] = True
+        meta['capture_epoch'] = epoch
+
+    CAPTURE_META_CACHE[cache_key] = meta
+    return meta
+
+def invalidate_capture_meta(file_path):
+    cache_key = os.path.normcase(os.path.abspath(str(file_path)))
+    CAPTURE_META_CACHE.pop(cache_key, None)
+
+def is_same_millisecond_capture(src_path, target_path):
+    src_meta = get_capture_meta(src_path)
+    tgt_meta = get_capture_meta(target_path)
+    if not (src_meta.get('has_precise_ms') and tgt_meta.get('has_precise_ms')):
+        return False
+    src_serial = src_meta.get('serial', PLACEHOLDER)
+    tgt_serial = tgt_meta.get('serial', PLACEHOLDER)
+    if src_serial != PLACEHOLDER and tgt_serial != PLACEHOLDER and src_serial != tgt_serial:
+        return False
+    src_ms = int(round(src_meta['capture_epoch'] * 1000))
+    tgt_ms = int(round(tgt_meta['capture_epoch'] * 1000))
+    return src_ms == tgt_ms
 
 def is_burst_shot(src_path, target_path):
-    src_subsec = get_exif_subsec(src_path)
-    tgt_subsec = get_exif_subsec(target_path)
-    if src_subsec and tgt_subsec and src_subsec != tgt_subsec:
-        return True
-    return False
+    src_meta = get_capture_meta(src_path)
+    tgt_meta = get_capture_meta(target_path)
+    src_serial = src_meta.get('serial', PLACEHOLDER)
+    tgt_serial = tgt_meta.get('serial', PLACEHOLDER)
+    if src_serial == PLACEHOLDER or tgt_serial == PLACEHOLDER or src_serial != tgt_serial:
+        return False
+    src_epoch = src_meta.get('capture_epoch')
+    tgt_epoch = tgt_meta.get('capture_epoch')
+    if src_epoch is None or tgt_epoch is None:
+        return False
+    delta = abs(src_epoch - tgt_epoch)
+    return 0 < delta < 1.0
 
 def compare_and_decide(src_path, target_path):
-    """優先序：0.實體完全相同略過 -> 1.連拍保護 -> 2.修改時間新舊對決"""
+    """Priority: IDENTICAL -> SAME_MS -> BURST -> REPLACE/KEEP by mtime."""
     if is_identical_file(src_path, target_path):
-        return False
+        return "IDENTICAL"
+
+    if is_same_millisecond_capture(src_path, target_path):
+        return "SAME_MS"
 
     if is_burst_shot(src_path, target_path):
         return "BURST"
@@ -412,9 +939,9 @@ def compare_and_decide(src_path, target_path):
     try:
         src_mtime = os.path.getmtime(src_path)
         tgt_mtime = os.path.getmtime(target_path)
-        return src_mtime > tgt_mtime
+        return "REPLACE" if src_mtime > tgt_mtime else "KEEP"
     except OSError:
-        return False
+        return "KEEP"
 
 def normalized_subsec(value):
     """將 EXIF 亞秒標準化為毫秒字串；不足三位補零，超過三位取毫秒。"""
@@ -465,7 +992,7 @@ def second_pass_month(month_dir, stop_event):
             (known[subsec] if subsec else unknown).append(member)
 
         rename_map = {}
-        # 相同亞秒是同一張照片的版本；修改時間最新者留前台，其餘進牛棚。
+        # 相同亞秒是同一張照片的版本；修改時間最新者留前台，其餘放到 candidate。
         for subsec, variants in known.items():
             winner = max(variants, key=lambda p: p.stat().st_mtime)
             if len(known) == 1:
@@ -478,7 +1005,7 @@ def second_pass_month(month_dir, stop_event):
                 if variant == winner:
                     continue
                 # 亞秒值納入候選檔名，避免多個連拍瞬間各自產生 -c1 而撞名。
-                target = unique_path(month_dir / 'bullpen', f"{base}-{subsec}-c{candidate_index}", ext)
+                target = unique_path(month_dir / 'candidate', f"{base}-{subsec}-c{candidate_index}", ext)
                 rename_map[variant] = target
                 candidate_index += 1
 
@@ -488,31 +1015,70 @@ def second_pass_month(month_dir, stop_event):
 
         safe_rename_batch(rename_map)
 
-def collect_media_records(dest_path, organize_by_time):
-    """第二輪後由實際目的地重建 HTML 索引，避免遺漏牛棚或略過檔。"""
+# 函式定義加上 start_time=0、processed_size=0 與 performance_mode=False
+def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, q=None, stop_event=None, start_time=0, processed_size=0, performance_mode=False):
+    """第二輪後由實際目的地重建 HTML 索引，若開啟地理解析則極速反查，並同步更新 UI 進度與計時狀態"""
     records_by_group = defaultdict(list)
+    geo_log_callback = (lambda message: q.put(('log', message))) if (q and not performance_mode) else None
+    geo_stats = {'pass': 0, 'fail': 0, 'skip': 0}
+    geo_fail_by_abs_path = {}
+    geo_map_by_abs_path = {}
+    geo_fail_reason_counter = Counter()
     roots = [p for p in dest_path.iterdir() if p.is_dir()] if organize_by_time else [dest_path]
+
+    all_files = []
     for root in roots:
-        month_key = root.name if organize_by_time else 'ALL_MEDIA'
         for path in root.rglob('*'):
-            if not path.is_file() or path.name.startswith('_'):
-                continue
-            ext = path.suffix.lower()
-            if ext in RAW_EXTENSIONS:
-                continue
-            if ext not in STANDARD_EXTENSIONS and ext not in VIDEO_EXTENSIONS:
-                continue
-            base, _ = timestamp_parts(path.stem)
-            category = 'bullpen' if 'bullpen' in path.parts else ('video' if ext in VIDEO_EXTENSIONS else 'standard')
-            records_by_group[month_key].append({
-                'name': path.name, 'rel_path': path.relative_to(dest_path).as_posix(),
-                'size': path.stat().st_size, 'category': category,
-                'group_key': base or path.stem, 'group_order': 1 if category == 'bullpen' else 0
-            })
-    return records_by_group
+            if path.is_file() and not path.name.startswith('_'):
+                ext = path.suffix.lower()
+                if ext in STANDARD_EXTENSIONS or ext in VIDEO_EXTENSIONS:
+                    all_files.append((root.name if organize_by_time else 'ALL_MEDIA', path))
+
+    total_count = len(all_files)
+
+    for idx, (month_key, path) in enumerate(all_files, start=1):
+        if stop_event and stop_event.is_set():
+            break
+
+        if q and idx % 15 == 0:  # 每處理 15 個檔案推播一次進度
+            q.put(('status', f"Building HTML report and geo cache index... ({idx} / {total_count})"))
+            q.put(('progress', idx / max(total_count, 1)))
+            # 新增：持續推送計時器更新，讓 UI 時間累計順暢跳動
+            if start_time > 0:
+                q.put(('metrics', (time.time() - start_time, processed_size)))
+
+        ext = path.suffix.lower()
+        base, _ = timestamp_parts(path.stem)
+        category = 'candidate' if 'candidate' in path.parts else ('video' if ext in VIDEO_EXTENSIONS else 'standard')
+
+        loc_name, map_url = "-", "-"
+        needs_geo_lookup = category in ("standard", "candidate") and ext in GEO_LOOKUP_EXTENSIONS
+        if enable_geo_lookup and needs_geo_lookup:
+            loc_name, map_url, geo_status, geo_error = get_exif_location(path, log_callback=geo_log_callback)
+            if geo_status in geo_stats:
+                geo_stats[geo_status] += 1
+            if geo_status == "fail" and geo_error:
+                geo_fail_by_abs_path[os.path.normcase(os.path.abspath(str(path)))] = geo_error
+                geo_fail_reason_counter[geo_error] += 1
+            if geo_status == "pass" and map_url != "-":
+                geo_map_by_abs_path[os.path.normcase(os.path.abspath(str(path)))] = map_url
+
+        records_by_group[month_key].append({
+            'name': path.name, 'rel_path': path.relative_to(dest_path).as_posix(),
+            'size': path.stat().st_size, 'category': category,
+            'group_key': base or path.stem, 'group_order': 1 if category == 'candidate' else 0,
+            'loc_name': loc_name, 'map_url': map_url
+        })
+
+    if q:
+        q.put(('progress', 1.0))
+        if start_time > 0:
+            q.put(('metrics', (time.time() - start_time, processed_size)))
+
+    return records_by_group, geo_stats, geo_fail_by_abs_path, geo_map_by_abs_path, geo_fail_reason_counter
 
 def destination_extension_counts(dest_path):
-    excluded = {'_manifest_audit_report.csv', '_manifest_audit_report.html', '_skip_fail_report.txt', '_file_type_summary.html'}
+    excluded = {'_index.html', '_manifest_audit.csv', '_manifest_skiplist.txt', '_manifest_filetype.html'}
     return Counter(p.suffix.lower() or '[無副檔名]' for p in dest_path.rglob('*') if p.is_file() and p.name not in excluded and not p.name.startswith('_process_log') and not p.name.endswith('_media_report.html'))
 
 def generate_html_report(output_root_dir, month_key, media_records):
@@ -520,6 +1086,10 @@ def generate_html_report(output_root_dir, month_key, media_records):
         return
 
     html_path = Path(output_root_dir) / f"{month_key}_media_report.html"
+    generated_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    month_title = f"{month_key} 媒體處理報告"
+    if re.fullmatch(r"\d{4}_\d{2}", str(month_key)):
+        month_title = f"{month_key[:4]}年{month_key[5:7]}月的照片與影片"
 
     cards_html = []
     for rec in media_records:
@@ -530,27 +1100,23 @@ def generate_html_report(output_root_dir, month_key, media_records):
 
         fname = rec['name']
         escaped_fname = html.escape(fname, quote=True)
-        escaped_display_path = html.escape(display_rel_path, quote=True)
         fsize = format_size(rec['size'])
         category = rec['category']
         group_key = rec.get('group_key', Path(fname).stem)
         group_order = rec.get('group_order', 0)
 
         display_label = "IMAGE" if category == "standard" else category.upper()
-        if category == "edited": display_label = "EDITED"
-        elif category == "bullpen": display_label = "⚾ 牛棚候選"
+        if category == "candidate": display_label = "備選"
 
         badge_style = "background: #7D8C94; color: white;"
         if category == "raw": badge_style = "background: #A88B87; color: white;"
         elif category == "video": badge_style = "background: #66747A; color: white;"
-        elif category == "edited": badge_style = "background: #8A9A8A; color: white;"
-        elif category == "bullpen": badge_style = "background: #E67E22; color: white;"
+        elif category == "candidate": badge_style = "background: #E67E22; color: white;"
 
         error_div = '<div class="error-msg">檔案已刪除</div>'
         error_script = "this.closest('.media-card').classList.add('broken');"
 
-        # 關鍵修復：將 edited 類別加入圖像渲染分支，確保修圖過的圖片也能正常顯示縮圖
-        if category in ("standard", "edited", "bullpen"):
+        if category in ("standard", "candidate"):
             img_tag = f'<img data-src="{rel_path_encoded}" class="lazy-image" alt="{escaped_fname}" onerror="{error_script}">{error_div}'
         else:
             if category == "video":
@@ -561,6 +1127,15 @@ def generate_html_report(output_root_dir, month_key, media_records):
             else:
                 img_tag = f'<div class="raw-placeholder">{escaped_fname}</div>{error_div}'
 
+        # 新增：將地理位置整合進月份卡片中
+        loc_name = rec.get('loc_name', '-')
+        map_url = rec.get('map_url', '-')
+        geo_html = ""
+        if loc_name != "-" or map_url != "-":
+            loc_display = html.escape(loc_name, quote=True) if loc_name != "-" else "未知位置"
+            map_link_html = f'<a href="{map_url}" target="_blank" class="geo-map-btn" onclick="event.stopPropagation();" title="View on Google Maps">🌏️</a>' if map_url != "-" else ""
+            geo_html = f'<div class="geo-bar"><span class="geo-text" title="{loc_display}">📍 {loc_display}</span>{map_link_html}</div>'
+
         # data-filepath 嚴格保留未轉碼之原始相對路徑，供 Windows/macOS 終端機刪除語法使用
         card = f"""
         <div class="media-card" data-category="{category}" data-name="{html.escape(fname.lower(), quote=True)}" data-group="{html.escape(group_key.lower(), quote=True)}" data-group-order="{group_order}" data-size="{rec['size']}" data-url="{rel_path_encoded}" data-filepath="{html.escape(str(Path(output_root_dir) / rel_path), quote=True)}" data-display-name="{escaped_fname}">
@@ -569,6 +1144,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
             </div>
             <div class="info">
                 <div class="filename" title="{escaped_fname}">{escaped_fname}</div>
+                {geo_html}
                 <div class="details">
                     <span class="badge" style="{badge_style}">{display_label}</span>
                     <span class="size">{fsize}</span>
@@ -584,12 +1160,13 @@ def generate_html_report(output_root_dir, month_key, media_records):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{month_key} 媒體處理報告</title>
+    <title>{month_title}</title>
     <style>
         :root {{ --bg: #F4F6F7; --card-bg: #FFFFFF; --text: #4A4F54; --border: #E0E4E6; }}
         body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }}
         header {{ background: var(--card-bg); padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; }}
         h1 {{ margin: 0 0 10px 0; font-size: 24px; color: #2C3E50; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; }}
+        .generated-time {{ color: #95A5A6; font-size: 13px; font-weight: normal; }}
         .controls {{ display: flex; flex-wrap: wrap; gap: 15px; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border); }}
         .btn-group {{ display: flex; gap: 8px; flex-wrap: wrap; }}
         button {{ background: #7D8C94; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; transition: 0.2s; font-weight: bold; }}
@@ -605,6 +1182,10 @@ def generate_html_report(output_root_dir, month_key, media_records):
         .video-placeholder, .raw-placeholder {{ text-align: center; color: #7F8C8D; font-weight: bold; padding: 10px; }}
         .info {{ padding: 12px; display: flex; flex-direction: column; flex-grow: 1; justify-content: space-between; gap: 8px; }}
         .filename {{ font-size: 13px; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .geo-bar {{ display: flex; justify-content: space-between; align-items: center; font-size: 11px; background: #F8F9F9; padding: 4px 6px; border-radius: 4px; border: 1px solid var(--border); gap: 4px; }}
+        .geo-text {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #5D6D7E; flex-grow: 1; }}
+        .geo-map-btn {{ color: #2980B9; text-decoration: none; font-weight: bold; flex-shrink: 0; background: #EAF2F8; padding: 2px 6px; border-radius: 3px; transition: 0.2s; }}
+        .geo-map-btn:hover {{ background: #D4E6F1; text-decoration: underline; }}
         .details {{ display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #7F8C8D; }}
         .badge {{ padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: bold; }}
         .card-del-btn {{ background: #EAECEE; color: #7F8C8D; font-size: 11px; padding: 5px; width: 100%; border-radius: 4px; margin-top: 5px; }}
@@ -638,7 +1219,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
 <body>
     <header>
         <h1>
-            <span>📁 {month_key} 媒體處理報告</span>
+            <span>📁 {month_title} <span class="generated-time">(Generated : {generated_ts})</span></span>
             <span style="font-size: 15px; font-weight: normal; color:#7F8C8D;">總共收錄: <strong>{len(media_records)}</strong> 個檔案</span>
         </h1>
         <div class="delete-bar" id="deleteBar">
@@ -654,7 +1235,6 @@ def generate_html_report(output_root_dir, month_key, media_records):
             <div class="btn-group">
                 <button class="filter-btn active" onclick="filterSelection('all')">全部</button>
                 <button class="filter-btn" onclick="filterSelection('standard')">照片</button>
-                <button class="filter-btn" onclick="filterSelection('edited')">編修過照片</button>
                 <button class="filter-btn" onclick="filterSelection('video')">影片</button>
             </div>
             <span style="margin-left:auto;">排序方式:</span>
@@ -923,45 +1503,53 @@ def generate_html_report(output_root_dir, month_key, media_records):
 def generate_file_type_summary(output_root_dir, audit_manifest):
     """產生獨立的副檔名統計頁；目的地數量以本次最終實體檔為準。"""
     source = Counter(row[4].lower() or '[無副檔名]' for row in audit_manifest)
-    copied = Counter(row[4].lower() or '[無副檔名]' for row in audit_manifest if row[6] == '成功')
-    skipped = Counter(row[4].lower() or '[無副檔名]' for row in audit_manifest if row[6] == '略過')
-    failed = Counter(row[4].lower() or '[無副檔名]' for row in audit_manifest if row[6] == '失敗')
+    copied = Counter(row[4].lower() or '[no_ext]' for row in audit_manifest if row[6] == 'PASS')
+    skipped = Counter(row[4].lower() or '[no_ext]' for row in audit_manifest if row[6] == 'SKIP')
+    failed = Counter(row[4].lower() or '[no_ext]' for row in audit_manifest if row[6] == 'FAIL')
     destination = destination_extension_counts(Path(output_root_dir))
     extensions = sorted(set(source) | set(destination))
     rows = ''.join(
         f"<tr><td>{html.escape(ext)}</td><td>{source[ext]:,}</td><td>{copied[ext]:,}</td><td>{skipped[ext]:,}</td><td>{failed[ext]:,}</td><td>{destination[ext]:,}</td></tr>"
         for ext in extensions
     )
+    generated_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     content = f'''<!doctype html><html lang="zh-TW"><meta charset="utf-8"><title>檔案類型統計</title>
     <style>body{{font-family:Segoe UI,sans-serif;margin:24px;color:#2c3e50}}table{{border-collapse:collapse;width:100%;max-width:900px}}th,td{{padding:9px 12px;border:1px solid #dfe6e9;text-align:right}}th:first-child,td:first-child{{text-align:left}}th{{background:#eef2f3}}</style>
-    <h1>檔案類型統計</h1><p>來源掃描數包含本次掃描範圍內所有副檔名；目的地實際數不含程式產生的報表與日誌。</p>
-    <table><tr><th>副檔名</th><th>來源掃描數</th><th>本次成功複製</th><th>本次略過</th><th>本次失敗</th><th>目的地實際數</th></tr>{rows}</table></html>'''
-    with open(Path(output_root_dir) / '_file_type_summary.html', 'w', encoding='utf-8') as f:
+    <h1>檔案類型統計 <span style="color:#95A5A6;font-size:13px;font-weight:normal;">(Generated : {generated_ts})</span></h1><p>來源掃描數包含本次掃描範圍內所有副檔名；目的地實際數不含程式產生的報表與日誌。</p>
+    <table><tr><th>Ext</th><th>Scanned</th><th>PASS</th><th>SKIP</th><th>FAIL</th><th>Dest Count</th></tr>{rows}</table></html>'''
+    with open(Path(output_root_dir) / '_manifest_filetype.html', 'w', encoding='utf-8') as f:
         f.write(content)
 
-# --- 產生免外掛、完全獨立可執行的 HTML 總對帳單報表 ---
+# --- 產生免外掛、完全獨立可執行的 HTML 總報表 ---
 def generate_manifest_html(output_root_dir, audit_manifest):
     if not audit_manifest:
         return
     import json
-    html_path = Path(output_root_dir) / "_manifest_audit_report.html"
+    html_path = Path(output_root_dir) / "_index.html"
+    generated_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    has_geo_column = any(len(row) > 9 for row in audit_manifest)
+    geo_filter_btn_html = '<button onclick="setFilter(\'status\', \'GEO\', this)">🌏 GEO</button>' if has_geo_column else ''
+    geo_header_html = '<th>地圖</th>' if has_geo_column else ''
 
     # 1. 為了減少體積與記憶體，將資料轉為純陣列結構，不再生成任何靜態 <tr> HTML
-    # 順序對應: 0:檔名, 1:來源, 2:輸出, 3:相機, 4:副檔名, 5:類別, 6:狀態, 7:理由, 8:插件
+    # 順序對應: 0:檔名, 1:來源, 2:輸出, 3:相機, 4:副檔名, 5:類別, 6:狀態, 7:理由, 8:插件, 9:地圖(可選)
     clean_data = []
     for row in audit_manifest:
-        clean_data.append([
+        normalized = [
             str(row[0]),
-            # 若原始為 "N/A"，統一強制轉為 "-"
-            format_display_path(row[1]) if (row[1] and row[1] != "N/A") else "-",
-            format_display_path(row[2]) if (row[2] and row[2] != "N/A") else "-",
+            # Normalize non-path placeholders to "-"
+            format_display_path(row[1]) if (row[1] and row[1] != PLACEHOLDER) else PLACEHOLDER,
+            format_display_path(row[2]) if (row[2] and row[2] != PLACEHOLDER) else PLACEHOLDER,
             str(row[3]),
             str(row[4]),
             str(row[5]),
             str(row[6]),
             str(row[7]),
             str(row[8])
-        ])
+        ]
+        if has_geo_column:
+            normalized.append(str(row[9]) if len(row) > 9 else PLACEHOLDER)
+        clean_data.append(normalized)
 
     # 2. 將 Python List 轉為壓縮版 JSON 字串 (去除多餘空白，體積縮小 80%)
     json_data_str = json.dumps(clean_data, ensure_ascii=False, separators=(',', ':'))
@@ -971,12 +1559,13 @@ def generate_manifest_html(output_root_dir, audit_manifest):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>媒體處理對帳報告表</title>
+    <title>照片影片處理總報表</title>
     <style>
         :root {{ --bg: #F4F6F7; --card-bg: #FFFFFF; --text: #4A4F54; --border: #E0E4E6; --main: #7D8C94; }}
         body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }}
         header {{ background: var(--card-bg); padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }}
         h1 {{ margin: 0 0 15px 0; font-size: 22px; color: #2C3E50; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }}
+        .generated-time {{ color: #95A5A6; font-size: 13px; font-weight: normal; }}
         .filter-bar {{ display: flex; flex-wrap: wrap; gap: 15px; align-items: center; border-top: 1px solid var(--border); padding-top: 15px; }}
         .btn-group {{ display: flex; gap: 6px; flex-wrap: wrap; }}
         button {{ background: var(--main); color: white; border: none; padding: 6px 14px; border-radius: 5px; cursor: pointer; transition: 0.2s; font-size: 13px; font-weight: bold; }}
@@ -1011,27 +1600,27 @@ def generate_manifest_html(output_root_dir, audit_manifest):
 <body>
     <header>
         <h1>
-            <span>📋 媒體處理總對帳單 </span>
+            <span>📋 照片影片處理總報表 <span class="generated-time">(Generated : {generated_ts})</span></span>
             <span style="font-size: 14px; color: #7F8C8D; font-weight: normal;">總收錄: <strong id="totalCount" style="color:#2C3E50;">0</strong> 筆資料</span>
         </h1>
         <div class="filter-bar">
-            <button onclick="window.open('_file_type_summary.html','fileTypeSummary','width=980,height=720')">檔案類型統計</button>
+            <button onclick="window.open('_manifest_filetype.html','fileTypeSummary','width=980,height=720')">檔案類型統計</button>
             <span>🔍 搜尋過濾:</span>
             <input type="text" id="searchInput" oninput="debounceFilter()" placeholder="關鍵字 (檔名、相機、插件訊息)...">
 
             <span style="margin-left: 10px;">狀態篩選:</span>
             <div class="btn-group" id="statusBtns">
                 <button class="active" onclick="setFilter('status', 'all', this)">全部</button>
-                <button onclick="setFilter('status', '成功', this)">✅ 成功</button>
-                <button onclick="setFilter('status', '略過', this)">⏭️ 略過</button>
-                <button onclick="setFilter('status', '失敗', this)">❌ 失敗</button>
+                {geo_filter_btn_html}
+                <button onclick="setFilter('status', 'PASS', this)">✅ PASS</button>
+                <button onclick="setFilter('status', 'SKIP', this)">⏭️ SKIP</button>
+                <button onclick="setFilter('status', 'FAIL', this)">❌ FAIL</button>
             </div>
 
             <span style="margin-left: 10px;">類別:</span>
             <div class="btn-group" id="catBtns">
                 <button class="active" onclick="setFilter('cat', 'all', this)">全部</button>
                 <button onclick="setFilter('cat', 'standard', this)">照片</button>
-                <button onclick="setFilter('cat', 'edited', this)">已修圖</button>
                 <button onclick="setFilter('cat', 'video', this)">影片</button>
                 <button onclick="setFilter('cat', 'raw', this)">RAW</button>
             </div>
@@ -1070,6 +1659,7 @@ def generate_manifest_html(output_root_dir, audit_manifest):
                     <th>輸出目標路徑</th>
                     <th>相機型號</th>
                     <th>副檔名</th>
+                    {geo_header_html}
                     <th>處理類別</th>
                     <th>最終狀態</th>
                     <th>詳細說明/略過原因</th>
@@ -1085,6 +1675,7 @@ def generate_manifest_html(output_root_dir, audit_manifest):
     <script>
         // 1. 載入原始 JSON 大數據陣列
         const RAW_DATA = {json_data_str};
+        const HAS_GEO_COL = {"true" if has_geo_column else "false"};
 
         let filteredData = RAW_DATA;
         let currentPage = 1;
@@ -1121,10 +1712,14 @@ def generate_manifest_html(output_root_dir, audit_manifest):
         function applyFilters() {{
             let kw = filterState.keyword;
             filteredData = RAW_DATA.filter(row => {{
-                if (filterState.status !== 'all' && row[6] !== filterState.status) return false;
+                if (filterState.status === 'GEO') {{
+                    if (!(HAS_GEO_COL && String(row[9] || "-") !== "-")) return false;
+                }} else if (filterState.status !== 'all' && row[6] !== filterState.status) {{
+                    return false;
+                }}
                 if (filterState.cat !== 'all' && row[5] !== filterState.cat) return false;
                 if (kw !== "") {{
-                    let searchStr = (row[0] + " " + row[3] + " " + row[8]).toLowerCase();
+                    let searchStr = (row[0] + " " + row[3] + " " + row[8] + " " + (HAS_GEO_COL ? (row[9] || "") : "")).toLowerCase();
                     if (searchStr.indexOf(kw) === -1) return false;
                 }}
                 return true;
@@ -1172,7 +1767,7 @@ def generate_manifest_html(output_root_dir, audit_manifest):
         function renderTable() {{
             let tbody = document.getElementById("tableBody");
             if (filteredData.length === 0) {{
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:30px; color:#999;">找不到符合條件的資料</td></tr>';
+                tbody.innerHTML = `<tr><td colspan="${{HAS_GEO_COL ? 10 : 9}}" style="text-align:center; padding:30px; color:#999;">找不到符合條件的資料</td></tr>`;
                 return;
             }}
 
@@ -1190,19 +1785,38 @@ def generate_manifest_html(output_root_dir, audit_manifest):
                 let status = escapeHtml(row[6]);
                 let reason = escapeHtml(row[7]);
                 let plugin = escapeHtml(row[8]);
+                let geoMap = HAS_GEO_COL ? String(row[9] || "-") : "-";
+
+                let dstCellHtml = dstP;
+                if ((status === "PASS" || reason.indexOf("IDENTICAL") !== -1) && dstP !== "-" && dstP.indexOf("ALL_MEDIA") === -1) {{
+                    let match = dstP.match(/(\\d{{4}}_\\d{{2}})/);
+                    if (match) {{
+                        let monthReportUrl = `./${{match[1]}}_media_report.html`;
+                        dstCellHtml = `<a href="${{monthReportUrl}}" target="_blank" style="color:#2980B9; text-decoration:underline; font-weight:bold;">${{dstP}}</a>`;
+                    }}
+                }}
 
                 let statusClass = "status-success";
-                if (status === "略過") statusClass = "status-skip";
-                else if (status === "失敗") statusClass = "status-fail";
+                if (status === "SKIP") statusClass = "status-skip";
+                else if (status === "FAIL") statusClass = "status-fail";
+                let geoCellHtml = (HAS_GEO_COL && geoMap !== "-")
+                    ? `<a href="${{escapeHtml(geoMap)}}" target="_blank" title="View on Google Maps">🌏️</a>`
+                    : "-";
+
+                // Normalize geo link rendering to avoid mojibake/broken tag issues.
+                geoCellHtml = (HAS_GEO_COL && geoMap !== "-")
+                    ? `<a href="${{escapeHtml(geoMap)}}" target="_blank" title="View on Google Maps">&#127757;</a>`
+                    : "-";
 
                 let rowClass = (plugin !== "-") ? "has-plugin-warn" : "";
 
                 return `<tr class="${{rowClass}}">
                     <td class="font-bold">${{fname}}</td>
                     <td class="path-cell" title="${{srcP}}">${{srcP}}</td>
-                    <td class="path-cell" title="${{dstP}}">${{dstP}}</td>
+                    <td class="path-cell" title="${{dstP}}">${{dstCellHtml}}</td>
                     <td><span class="cam-badge">${{cam}}</span></td>
                     <td>${{ext}}</td>
+                    ${{HAS_GEO_COL ? `<td>${{geoCellHtml}}</td>` : ``}}
                     <td>${{cat}}</td>
                     <td><span class="status-badge ${{statusClass}}">${{status}}</span></td>
                     <td class="reason-cell" title="${{reason}}">${{reason}}</td>
@@ -1226,17 +1840,33 @@ def generate_manifest_html(output_root_dir, audit_manifest):
         pass
 
 # --- 背景執行緒函式 ---
-def threaded_process_images(selected_folders, dest_dir, organize_by_time, normalize_name, separate_edited, copy_video, copy_raw, overwrite, q, stop_event):
+def threaded_process_images(selected_folders, dest_dir, organize_by_time, normalize_name, enable_geo_lookup, copy_video, copy_raw, overwrite, performance_mode, q, stop_event):
     dest_path = Path(dest_dir)
-    # 編修分流已由第二輪同秒群組判讀取代；保留參數僅為舊設定相容。
-    separate_edited = False
     report_lines = []
     audit_manifest = []
+    CAPTURE_META_CACHE.clear()
+    if performance_mode:
+        q.put(('log', "[PERF] Performance mode enabled: less log / fast scan / GEO fail summary"))
 
     if not organize_by_time and len(selected_folders) != 1:
         q.put(('msgbox', ("設定錯誤", "未啟用依年月整理時，來源與目的資料夾為 1:1，無法處理多個來源資料夾。"), 'warning', None))
         q.put(('reset', None))
         return
+
+    # 🎯 核心優化：地理解析顯式預先載入 (Explicit Lazy Loading)
+    # 解決在第一輪與第二輪之間「卡在 100% 默默載入地理庫」導致假死的 Bug
+    if enable_geo_lookup and not RG_AVAILABLE:
+        q.put(('log', "[GEO] FAIL: reverse_geocoder unavailable; only EXIF GPS and map URL will be used."))
+
+    if enable_geo_lookup and RG_AVAILABLE:
+        q.put(('status', "⏳ Loading global offline geo database (first load may take a few seconds)..."))
+        try:
+            # 🎯 使用「桃園火車站」座標預熱，精準優化大桃園地區生活與出遊照片的 CPU L1/L2 空間快取
+            _ = rg.search((24.989, 121.313))
+            q.put(('log', "✅ Global offline geo database loaded and index warmed up."))
+        except Exception as e:
+            q.put(('log', f"⚠️ [GEO] ERROR: database preload failed: {e}"))
+            enable_geo_lookup = False
 
     files = []
     valid_extensions = set(STANDARD_EXTENSIONS)
@@ -1252,14 +1882,15 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             removed_dirs = [d for d in dirnames if any(keyword in d.lower() for keyword in EXCLUDE_DIR_KEYWORDS)]
             for d in removed_dirs:
                 skip_path = format_display_path(os.path.join(dirpath, d))
-                skip_msg = f"[排除目錄] {skip_path} | 原因：不處理的目錄 ({d})"
+                skip_msg = f"[SKIP_DIR] {skip_path} | REASON: ignored directory ({d})"
                 report_lines.append(skip_msg + "\n")
-                q.put(('log', skip_msg))
+                if not performance_mode:
+                    q.put(('log', skip_msg))
             dirnames[:] = [d for d in dirnames if d not in removed_dirs]
 
             display_path = format_display_path(dirpath)
             display_path = display_path if len(display_path) <= 65 else "..." + display_path[-62:]
-            q.put(('status', f"🔍 正在掃描目錄: {display_path}"))
+            q.put(('status', f"🔍 Scanning directory: {display_path}"))
             for filename in filenames:
                 ext = os.path.splitext(filename)[1].lower()
                 full_src_p = os.path.join(dirpath, filename)
@@ -1267,19 +1898,19 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                 full_src_win_p = format_display_path(full_src_p)
 
                 if ext in IGNORED_EXTENSIONS:
-                    report_lines.append(f"[排除檔案] {full_src_win_p} | 原因：不處理的副檔名 ({ext})\n")
+                    report_lines.append(f"[SKIP_FILE] {full_src_win_p} | REASON: ignored extension ({ext})\n")
                     # 順序: [名稱, 來源, 輸出, 相機, 副檔名, 類別, 狀態, 理由, 插件]
-                    audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "忽略", "略過", f"不處理的副檔名 ({ext})", "-"])
+                    audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "ignored", "SKIP", f"ignored extension ({ext})", "-"])
                     continue
 
                 if ext in valid_extensions:
                     files.append(Path(dirpath) / filename)
                 else:
-                    report_lines.append(f"[略過] {full_src_win_p} | 原因：其他副檔名 ({ext})\n")
-                    audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "忽略", "略過", f"其他副檔名 ({ext})", "-"])
+                    report_lines.append(f"[SKIP] {full_src_win_p} | REASON: unsupported extension ({ext})\n")
+                    audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "ignored", "SKIP", f"unsupported extension ({ext})", "-"])
 
     if stop_event.is_set():
-        q.put(('status', "🛑 處理已中斷"))
+        q.put(('status', "🛑 Processing interrupted"))
         q.put(('reset', None))
         return
 
@@ -1294,7 +1925,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     failed_count = 0
     start_time = time.time()
     processed_size_bytes = 0
-    q.put(('status', f"First Pass｜安全收集與完整去重：0 / {total_files} (0.0%)"))
+    q.put(('status', f"First Pass | safe collection and dup-skip: 0 / {total_files} (0.0%)"))
 
     monthly_media_map = {}
 
@@ -1309,15 +1940,17 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         # 用於記錄該檔案處理過程中的外掛異常訊息
         captured_warnings = []
         camera_model = "-"
+        loc_name, map_url = "-", "-"
 
         try:
             ext = file_path.suffix.lower()
             stem = file_path.stem
 
             # 讀取相機型號同時攔截插件訊息
-            with PluginWarningCapturer() as capturer:
-                camera_model = get_camera_model(file_path)
-            captured_warnings.extend(capturer.get_messages())
+            if not performance_mode:
+                with PluginWarningCapturer() as capturer:
+                    camera_model = get_camera_model(file_path)
+                captured_warnings.extend(capturer.get_messages())
 
             timestamp_base, _ = timestamp_parts(stem)
             clean_stem = timestamp_base or stem
@@ -1328,9 +1961,12 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             else:
                 if organize_by_time or normalize_name:
                     # 使用攔截器包覆 get_media_date
-                    with PluginWarningCapturer() as capturer:
+                    if performance_mode:
                         media_date = get_media_date(file_path)
-                    captured_warnings.extend(capturer.get_messages())
+                    else:
+                        with PluginWarningCapturer() as capturer:
+                            media_date = get_media_date(file_path)
+                        captured_warnings.extend(capturer.get_messages())
 
                     year = media_date.strftime('%Y')
                     month = media_date.strftime('%m')
@@ -1349,52 +1985,89 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                     category = "raw"
                 elif ext in VIDEO_EXTENSIONS:
                     category = "video"
-                elif separate_edited:
-                    # 使用攔截器包覆 is_media_edited
-                    with PluginWarningCapturer() as capturer:
-                        is_edited = is_media_edited(file_path)
-                    captured_warnings.extend(capturer.get_messages())
-                    if is_edited:
-                        target_dir /= "edited"
-                        category = "edited"
             else:
                 month_key = "ALL_MEDIA"
                 target_dir = dest_path / file_path.parent.relative_to(Path(selected_folders[0]).parent)
                 category = "standard"
                 if ext in RAW_EXTENSIONS: category = "raw"
                 elif ext in VIDEO_EXTENSIONS: category = "video"
-                elif separate_edited:
-                    with PluginWarningCapturer() as capturer:
-                        is_edited = is_media_edited(file_path)
-                    captured_warnings.extend(capturer.get_messages())
-                    if is_edited:
-                        target_dir /= "edited"
-                        category = "edited"
 
             # 去除重複的警告字句並以分號連接成單一行
-            plugin_msg_str = " ; ".join(dict.fromkeys(captured_warnings)) if captured_warnings else "-"
+            plugin_msg_str = " ; ".join(dict.fromkeys(captured_warnings)) if captured_warnings else PLACEHOLDER
 
             target_dir.mkdir(parents=True, exist_ok=True)
             target_file = target_dir / target_name
 
+            effective_category = category
             is_duplicate_skip = False
-
             skip_reason = None
+
             if target_file.exists():
-                original_stem = target_file.stem
-                while target_file.exists():
-                    if is_identical_file(file_path, target_file):
-                        is_duplicate_skip = True
-                        skip_reason = f"內容相同（完整 SHA-256 驗證）：{target_file.name}"
-                        break
-                    target_file = unique_path(target_dir, original_stem, ext)
+                overwrite_photo_mode = overwrite and category == "standard" and ext in STANDARD_EXTENSIONS
+                decision = compare_and_decide(file_path, target_file) if overwrite_photo_mode else ("IDENTICAL" if is_identical_file(file_path, target_file) else "KEEP")
+
+                if decision == "IDENTICAL":
+                    is_duplicate_skip = True
+                    skip_reason = f"IDENTICAL (full SHA-256 match): {target_file.name}"
+
+                elif overwrite_photo_mode and decision == "SAME_MS":
+                    src_mtime = os.path.getmtime(file_path)
+                    tgt_mtime = os.path.getmtime(target_file)
+                    if src_mtime > tgt_mtime:
+                        archived = candidate_path_for(target_dir, target_file.stem, ext)
+                        invalidate_capture_meta(target_file)
+                        invalidate_capture_meta(archived)
+                        target_file.rename(archived)
+                        if not performance_mode:
+                            q.put(('log', f"[OVERWRITE] SAME_MS: archived previous to candidate -> {archived.name}"))
+                    else:
+                        target_file = candidate_path_for(target_dir, target_file.stem, ext)
+                        effective_category = "candidate" if category == "standard" else category
+
+                elif overwrite_photo_mode and decision == "BURST":
+                    src_meta = get_capture_meta(file_path)
+                    tgt_meta = get_capture_meta(target_file)
+                    base_stem = timestamp_base or target_file.stem
+                    src_ms = src_meta.get('subsec_ms')
+                    tgt_ms = tgt_meta.get('subsec_ms')
+
+                    if tgt_ms and target_file.stem == base_stem:
+                        existing_burst_path = unique_path(target_dir, f"{base_stem}-{tgt_ms}", ext)
+                        invalidate_capture_meta(target_file)
+                        invalidate_capture_meta(existing_burst_path)
+                        target_file.rename(existing_burst_path)
+                        if not performance_mode:
+                            q.put(('log', f"[OVERWRITE] BURST: renamed existing -> {existing_burst_path.name}"))
+
+                    if src_ms:
+                        target_file = unique_path(target_dir, f"{base_stem}-{src_ms}", ext)
+                    else:
+                        target_file = unique_indexed_path(target_dir, base_stem, ext, start=1)
+
+                elif overwrite_photo_mode and decision == "REPLACE":
+                    archived = candidate_path_for(target_dir, target_file.stem, ext)
+                    invalidate_capture_meta(target_file)
+                    invalidate_capture_meta(archived)
+                    target_file.rename(archived)
+                    if not performance_mode:
+                        q.put(('log', f"[OVERWRITE] REPLACE: archived previous to candidate -> {archived.name}"))
+
+                elif overwrite_photo_mode and decision == "KEEP":
+                    target_file = candidate_path_for(target_dir, target_file.stem, ext)
+                    effective_category = "candidate" if category == "standard" else category
+
+                else:
+                    target_file = unique_path(target_dir, target_file.stem, ext)
+
+            if target_file.parent.name == 'candidate' and effective_category == "standard":
+                effective_category = "candidate"
 
             if is_duplicate_skip:
                 skipped_count += 1
                 processed_size_bytes += file_size
-                report_lines.append(f"[略過：內容相同] {full_win_path} | 原因: {skip_reason}\n")
-                audit_manifest.append([file_path.name, str(file_path), str(target_file), camera_model, ext, category, "略過", skip_reason, plugin_msg_str])
-                q.put(('metrics', (time.time() - start_time, processed_size_bytes)))
+                report_lines.append(f"[SKIP: IDENTICAL] {full_win_path} | REASON: {skip_reason}\n")
+                audit_manifest.append([file_path.name, str(file_path), str(target_file), camera_model, ext, effective_category, "SKIP", skip_reason, plugin_msg_str])
+                q.put(('metrics', processed_size_bytes))  # 直接丟總大小！
                 q.put(('progress', (i + 1) / total_files))
                 continue
 
@@ -1403,6 +2076,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                 try:
                     # 嚴格守則：只有在 Target 目錄執行複製與寫入，絕對不觸碰、不污染來源資料夾
                     shutil.copy2(file_path, target_file)
+                    invalidate_capture_meta(target_file)
 
                     log_path = target_dir / "_process_log.txt"
                     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -1414,20 +2088,23 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                         if month_key not in monthly_media_map:
                             monthly_media_map[month_key] = []
 
-                        if category != "raw":
+                        if effective_category != "raw":
                             monthly_media_map[month_key].append({
                                 'name': target_file.name,
                                 'rel_path': rel_p,
                                 'size': file_size,
-                                'category': category
+                                'category': effective_category,
+                                'loc_name': loc_name,
+                                'map_url': map_url
                             })
 
-                    audit_manifest.append([file_path.name, str(file_path), str(target_file), camera_model, ext, category, "成功", "複製成功", plugin_msg_str])
-                    q.put(('log', f"[{timestamp}] Processed: {file_path.name} -> {target_file.name}"))
+                    audit_manifest.append([file_path.name, str(file_path), str(target_file), camera_model, ext, effective_category, "PASS", "COPY_OK", plugin_msg_str])
+                    if not performance_mode:
+                        q.put(('log', f"[{timestamp}] Processed: {file_path.name} -> {target_file.name}"))
 
                     # 若該檔案有外掛異常訊息，同步輸出在 UI 日誌提示
-                    if plugin_msg_str != "-":
-                        q.put(('log', f"⚠️ [外掛訊息] {file_path.name}: {plugin_msg_str}"))
+                    if not performance_mode and plugin_msg_str != "-":
+                        q.put(('log', f"⚠️ [PLUGIN] {file_path.name}: {plugin_msg_str}"))
 
                     success_count += 1
                     break
@@ -1438,9 +2115,9 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         except Exception as e:
             failed_count += 1
             plugin_msg_str = " ; ".join(dict.fromkeys(captured_warnings)) if captured_warnings else "-"
-            report_lines.append(f"[失敗] {full_win_path} | 原因: 處理發生錯誤 ({str(e)})\n")
-            audit_manifest.append([file_path.name, str(file_path), "N/A", camera_model, ext, "N/A", "失敗", f"處理異常: {str(e)}", plugin_msg_str])
-            q.put(('error_log', f"處理 {file_path.name} 發生錯誤: {e}"))
+            report_lines.append(f"[FAIL] {full_win_path} | REASON: processing exception ({str(e)})\n")
+            audit_manifest.append([file_path.name, str(file_path), PLACEHOLDER, camera_model, ext, PLACEHOLDER, "FAIL", f"ERROR: processing exception: {str(e)}", plugin_msg_str])
+            q.put(('error_log', f"ERROR while processing {file_path.name}: {e}"))
 
         processed_size_bytes += file_size
         display_file_path = full_win_path if len(full_win_path) <= 65 else "..." + full_win_path[-62:]
@@ -1449,73 +2126,111 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         remaining = (total_files - i - 1) / rate if rate > 0 else 0
         q.put(('progress', (i + 1) / total_files))
         overall_remaining = remaining * 1.15  # 第二輪尚未取得實際群組數，先以保守係數估算。
-        q.put(('status', f"First Pass｜安全收集與完整去重：{i + 1} / {total_files} ({(i + 1) / total_files:.1%})｜已耗時 {format_time(phase_elapsed)}｜本階段剩餘 {format_time(remaining)}｜整體預估剩餘 {format_time(overall_remaining)}｜{display_file_path}"))
-        q.put(('metrics', (time.time() - start_time, processed_size_bytes)))
+        q.put(('status', f"First Pass | safe collection and duplicate-skip: {i + 1} / {total_files} ({(i + 1) / total_files:.1%}) | elapsed {format_time(phase_elapsed)} | phase remaining {format_time(remaining)} | overall ETA {format_time(overall_remaining)} | {display_file_path}"))
+        q.put(('metrics', processed_size_bytes))  # 直接丟總大小！
 
-    # Second Pass：所有檔案安全落地後，才進行同秒群組整理。
-    if not stop_event.is_set() and organize_by_time:
+    # Second Pass：僅在 overwrite 啟用時，進行同秒衝突與候選整理。
+    if not stop_event.is_set() and organize_by_time and overwrite:
         month_dirs = [p for p in dest_path.iterdir() if p.is_dir() and re.fullmatch(r'\d{4}_\d{2}', p.name)]
         second_start = time.time()
         for index, month_dir in enumerate(month_dirs, start=1):
             elapsed = time.time() - second_start
             rate = (index - 1) / elapsed if elapsed > 0 and index > 1 else 0
             remaining = (len(month_dirs) - index + 1) / rate if rate else 0
-            q.put(('status', f"Second Pass｜整理連拍與牛棚候選：{index} / {len(month_dirs)} ({index / max(len(month_dirs), 1):.1%})｜已耗時 {format_time(elapsed)}｜整體預估剩餘 {format_time(remaining)}｜{month_dir.name}"))
+            q.put(('status', f"Second Pass | organizing burst sets and alternates: {index} / {len(month_dirs)} ({index / max(len(month_dirs), 1):.1%}) | elapsed {format_time(elapsed)} | overall ETA {format_time(remaining)} | {month_dir.name}"))
             second_pass_month(month_dir, stop_event)
             q.put(('progress', index / max(len(month_dirs), 1)))
+            q.put(('metrics', processed_size_bytes))  # 直接丟總大小！
 
     generated_html_reports = []
+    index_report_path = None
+    geo_stats = {'pass': 0, 'fail': 0, 'skip': 0}
+    geo_fail_by_abs_path = {}
+    geo_map_by_abs_path = {}
     if not stop_event.is_set():
-        monthly_media_map = collect_media_records(dest_path, organize_by_time)
-        q.put(('status', "正在依最終檔案狀態生成 HTML 預覽報告..."))
+        # 第二輪重新收集檔案，同時傳遞地理開關以維持地標資訊，同步傳入佇列與中斷事件，同步傳入start_time 與 processed_size_bytes）：
+        monthly_media_map, geo_stats, geo_fail_by_abs_path, geo_map_by_abs_path, geo_fail_reason_counter = collect_media_records(
+            dest_path, organize_by_time, enable_geo_lookup, q, stop_event, start_time, processed_size_bytes, performance_mode
+        )
+        q.put(('status', "Generating HTML preview reports from final file state..."))
         for m_key, records in monthly_media_map.items():
             generate_html_report(dest_path, m_key, records)
             generated_html_reports.append((m_key, dest_path / f"{m_key}_media_report.html"))
 
     if audit_manifest:
         try:
-            manifest_path = dest_path / "_manifest_audit_report.csv"
+            if enable_geo_lookup:
+                q.put(('log', f"🧭 GEO stats | PASS: {geo_stats.get('pass', 0)} | FAIL: {geo_stats.get('fail', 0)} | SKIP: {geo_stats.get('skip', 0)}"))
+                if performance_mode and geo_fail_reason_counter:
+                    summary_parts = [f"{reason} x{count}" for reason, count in geo_fail_reason_counter.most_common(5)]
+                    q.put(('log', f"[GEO] FAIL summary: {' | '.join(summary_parts)}"))
+                for row in audit_manifest:
+                    if len(row) < 10:
+                        row.append(PLACEHOLDER)
+                    target_path = row[2]
+                    if target_path == PLACEHOLDER:
+                        continue
+                    geo_key = os.path.normcase(os.path.abspath(str(target_path)))
+                    geo_reason = geo_fail_by_abs_path.get(geo_key)
+                    if not geo_reason:
+                        geo_url = geo_map_by_abs_path.get(geo_key)
+                        if geo_url:
+                            row[9] = geo_url
+                        continue
+                    geo_msg = f"[GEO] {geo_reason}"
+                    row[8] = geo_msg if row[8] == PLACEHOLDER else f"{row[8]} ; {geo_msg}"
+                    geo_url = geo_map_by_abs_path.get(geo_key)
+                    if geo_url:
+                        row[9] = geo_url
+
+            manifest_path = dest_path / "_manifest_audit.csv"
             with open(manifest_path, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                # 新增「相機型號」,「插件訊息」欄位
-                writer.writerow(['檔案名稱', '來源完整路徑', '輸出目標路徑', '相機型號', '副檔名', '處理類別', '最終狀態', '詳細說明/略過原因', '插件訊息'])
+                # 新增「相機型號」,「插件訊息」欄位；地理解析啟用時加上「地圖」
+                has_geo_column = any(len(row) > 9 for row in audit_manifest)
+                header = ['檔案名稱', '來源完整路徑', '輸出目標路徑', '相機型號', '副檔名', '處理類別', '最終狀態', '詳細說明/略過原因', '插件訊息']
+                has_geo_column = any(len(row) > 9 for row in audit_manifest)
+                if has_geo_column:
+                    header.append('地圖')
+                writer.writerow(header)
                 writer.writerows([
                     [
                         row[0],
-                        format_display_path(row[1]) if row[1] != "N/A" else "N/A",
-                        format_display_path(row[2]) if row[2] != "N/A" else "N/A",
-                        *row[3:]
+                        format_display_path(row[1]) if row[1] != PLACEHOLDER else PLACEHOLDER,
+                        format_display_path(row[2]) if row[2] != PLACEHOLDER else PLACEHOLDER,
+                        *(row[3:] if has_geo_column else row[3:9])
                     ]
                     for row in audit_manifest
                 ])
-            q.put(('log', f"📋 CSV 報表已匯出: {manifest_path.name}"))
+            q.put(('log', f"📋 CSV report exported: {manifest_path.name}"))
 
             generate_file_type_summary(dest_path, audit_manifest)
-            # 同步產出 HTML 總對帳單報表
+            # 同步產出 HTML 總報表
             generate_manifest_html(dest_path, audit_manifest)
-            q.put(('log', f"🌐 HTML 報表已匯出: _manifest_audit_report.html"))
+            index_report_path = dest_path / "_index.html"
+            q.put(('log', f"🌐 HTML report exported: _index.html"))
 
         except Exception as e:
-            q.put(('error_log', f"無法匯出 CSV 對帳單: {e}"))
+            q.put(('error_log', f"ERROR: failed to export CSV audit report: {e}"))
 
     report_msg_append = ""
     if report_lines:
         try:
-            report_file_path = dest_path / "_skip_fail_report.txt"
+            report_file_path = dest_path / "_manifest_skiplist.txt"
             with open(report_file_path, "w", encoding="utf-8") as f:
                 f.write(f"=== 媒體處理例外報告 (產生時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ===\n")
-                f.write(f"總計略過: {skipped_count} | 總計失敗: {failed_count}\n")
+                f.write(f"TOTAL SKIP: {skipped_count} | TOTAL FAIL: {failed_count}\n")
                 f.write("="*80 + "\n")
                 f.writelines(report_lines)
-            report_msg_append = f"\n\n📄 報表已輸出至output根目錄:\n_skip_fail_report.txt\n_manifest_audit_report.csv\n_manifest_audit_report.html"
+            report_msg_append = f"\n\n📄 報表已輸出至output根目錄:\n_manifest_skiplist.txt\n_manifest_audit.csv\n_index.html"
         except Exception: pass
 
     if stop_event.is_set():
-        msg = f"🛑 處理已中斷！\n\n✅ 成功數量: {success_count}\n⏭️ 已略過: {skipped_count}\n❌ 處理失敗: {failed_count}{report_msg_append}"
-        q.put(('msgbox', ("中斷", msg), 'warning', None))
+        msg = f"中斷前已處理數量統計\n\n✅ PASS: {success_count}\n⏭️ SKIP: {skipped_count}\n❌ FAIL: {failed_count}{report_msg_append}"
+        q.put(('msgbox', ("中斷", msg), 'warning', None, index_report_path))
     else:
-        msg = f"處理完畢！\n\n✅ 成功數量: {success_count}\n⏭️ 略過檔案: {skipped_count}\n❌ 處理失敗: {failed_count}{report_msg_append}"
-        q.put(('msgbox', ("完成", msg), 'info', generated_html_reports))
+        msg = f"本次處理檔案數量統計\n\n✅ PASS: {success_count}\n⏭️ SKIP: {skipped_count}\n❌ FAIL: {failed_count}{report_msg_append}"
+        q.put(('msgbox', ("完成", msg), 'info', generated_html_reports, index_report_path))
 
     q.put(('reset', None))
 
@@ -1578,31 +2293,30 @@ def open_folder(path_var, selected_paths=None):
 
 # --- 精巧統計對話框 ---
 class ModernMessageBox(ctk.CTkToplevel):
-    def __init__(self, parent, title, message, level="info", theme_colors=None, html_reports=None):
+    def __init__(self, parent, title, message, level="info", theme_colors=None, html_reports=None, index_report_path=None):
         super().__init__(parent)
         self.title(title)
+        self.index_report_path = Path(index_report_path) if index_report_path else None
 
         num_reports = len(html_reports) if html_reports else 0
-        base_height = 240
-        row_height = 46
-        dialog_height = min(base_height + ((num_reports + 1) * row_height), 560)
+        base_height = UI_DIALOG_MSGBOX_BASE_HEIGHT
+        row_height = UI_DIALOG_MSGBOX_ROW_HEIGHT
+        dialog_height = min(base_height + ((num_reports + 1) * row_height), UI_DIALOG_MSGBOX_DYNAMIC_MAX_HEIGHT)
 
-        self.geometry(f"420x{dialog_height}")
-        self.minsize(400, 240)
-        self.maxsize(600, 720)
+        self.geometry(f"{UI_DIALOG_MSGBOX_WIDTH}x{dialog_height}")
+        self.minsize(UI_DIALOG_MSGBOX_MIN_WIDTH, UI_DIALOG_MSGBOX_MIN_HEIGHT)
+        self.maxsize(UI_DIALOG_MSGBOX_MAX_WIDTH, UI_DIALOG_MSGBOX_MAX_HEIGHT)
         self.transient(parent)
         self.grab_set()
 
-        icon_path = resource_path("icon.ico")
-        if os.path.exists(icon_path):
-            try: self.iconbitmap(icon_path)
-            except Exception: pass
+        apply_window_icon(self, inherit_from=parent)
 
         bg_color = theme_colors["BG"] if theme_colors else "#F4F6F7"
         main_color = theme_colors["MAIN"] if theme_colors else "#7D8C94"
         hover_color = theme_colors["HOVER"] if theme_colors else "#66747A"
         text_color = theme_colors["TEXT"] if theme_colors else "#4A4F54"
         self.configure(fg_color=bg_color)
+        apply_windows_titlebar_theme(self, main_color)
 
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=20, pady=(15, 5))
@@ -1611,41 +2325,57 @@ class ModernMessageBox(ctk.CTkToplevel):
         if level == "warning": icon_str = "⚠️"
         elif level == "error": icon_str = "❌"
 
-        ctk.CTkLabel(header_frame, text=icon_str, font=ctk.CTkFont(size=28)).pack(side="left", padx=(0, 10))
-        ctk.CTkLabel(header_frame, text=title, font=ctk.CTkFont(size=16, weight="bold"), text_color=text_color).pack(side="left")
+        ctk.CTkLabel(header_frame, text=icon_str, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_ICON)).pack(side="left", padx=(0, 10))
+        ctk.CTkLabel(header_frame, text=title, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_TITLE, weight="bold"), text_color=text_color).pack(side="left")
 
         content_frame = ctk.CTkFrame(self, fg_color="transparent")
         content_frame.pack(fill="both", expand=True, padx=20, pady=5)
-        lbl_msg = ctk.CTkLabel(content_frame, text=message, font=ctk.CTkFont(size=14), justify="left", text_color=text_color, wraplength=360)
+        lbl_msg = ctk.CTkLabel(content_frame, text=message, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_BODY), justify="left", text_color=text_color, wraplength=UI_MSGBOX_WRAP_LENGTH)
         lbl_msg.pack(anchor="w")
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="both", expand=True, padx=20, pady=(5, 15))
 
-        ctk.CTkButton(btn_frame, text="確定並關閉", height=38, font=ctk.CTkFont(size=14, weight="bold"),
-                      fg_color=main_color, hover_color=hover_color, command=self.destroy).pack(side="top", fill="x", pady=5)
+        ctk.CTkButton(btn_frame, text="確定並打開總報表", height=UI_MSGBOX_MAIN_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_MAIN_BTN, weight="bold"),
+                      fg_color=main_color, hover_color=hover_color, command=self.open_index_and_close).pack(side="top", fill="x", pady=5)
 
         if html_reports:
             if num_reports <= 3:
                 for m_key, h_path in html_reports:
-                    ctk.CTkButton(btn_frame, text=f"🌐 開啟 {m_key} 報告", height=36, font=ctk.CTkFont(size=13, weight="bold"),
+                    ctk.CTkButton(btn_frame, text=f"🌐 開啟 {m_key} 報告", height=UI_MSGBOX_REPORT_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_REPORT_BTN, weight="bold"),
                                   fg_color="#2980B9", hover_color="#1F618D",
                                   command=lambda p=h_path: webbrowser.open(p.as_uri())).pack(side="top", fill="x", pady=4)
             else:
-                scroll_reports = ctk.CTkScrollableFrame(btn_frame, height=180, fg_color="transparent")
+                scroll_reports = ctk.CTkScrollableFrame(btn_frame, height=UI_MSGBOX_REPORT_SCROLL_HEIGHT, fg_color="transparent")
                 scroll_reports.pack(side="top", fill="both", expand=True, pady=2)
                 for m_key, h_path in html_reports:
-                    ctk.CTkButton(scroll_reports, text=f"🌐 開啟 {m_key} 報告", height=36, font=ctk.CTkFont(size=13, weight="bold"),
+                    ctk.CTkButton(scroll_reports, text=f"🌐 開啟 {m_key} 報告", height=UI_MSGBOX_REPORT_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_REPORT_BTN, weight="bold"),
                                   fg_color="#2980B9", hover_color="#1F618D",
                                   command=lambda p=h_path: webbrowser.open(p.as_uri())).pack(side="top", fill="x", pady=4, padx=2)
+
+    # --- 完成彈窗動作 ---
+    def open_index_and_close(self):
+        try:
+            if self.index_report_path and self.index_report_path.exists():
+                webbrowser.open(self.index_report_path.as_uri())
+                target_folder = self.index_report_path.parent
+                if sys.platform == "win32":
+                    os.startfile(str(target_folder))
+                elif sys.platform == "darwin":
+                    subprocess.Popen(["open", str(target_folder)])
+                else:
+                    subprocess.Popen(["xdg-open", str(target_folder)])
+        except Exception:
+            pass
+        self.destroy()
 
 # --- 彈窗勾選子目錄介面 ---
 class FolderSelectDialog(ctk.CTkToplevel):
     def __init__(self, parent, initial_dir, callback, theme_colors=None, allow_multiple=True):
         super().__init__(parent)
         self.title("多資料夾選取器 - 請勾選欲處理的目錄")
-        self.geometry("640x540")
-        self.minsize(480, 380)
+        self.geometry(UI_DIALOG_FOLDER_GEOMETRY)
+        self.minsize(UI_DIALOG_FOLDER_MIN_WIDTH, UI_DIALOG_FOLDER_MIN_HEIGHT)
         self.callback = callback
         self.selected_paths = []
         self.allow_multiple = allow_multiple
@@ -1653,10 +2383,7 @@ class FolderSelectDialog(ctk.CTkToplevel):
         self.transient(parent)
         self.grab_set()
 
-        icon_path = resource_path("icon.ico")
-        if os.path.exists(icon_path):
-            try: self.iconbitmap(icon_path)
-            except Exception: pass
+        apply_window_icon(self, inherit_from=parent)
 
         bg_color = theme_colors["BG"] if theme_colors else "#F4F6F7"
         main_color = theme_colors["MAIN"] if theme_colors else "#7D8C94"
@@ -1664,16 +2391,17 @@ class FolderSelectDialog(ctk.CTkToplevel):
         stop_color = theme_colors["STOP"] if theme_colors else "#A88B87"
         text_color = theme_colors["TEXT"] if theme_colors else "#4A4F54"
         self.configure(fg_color=bg_color)
+        apply_windows_titlebar_theme(self, main_color)
 
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
         top_frame.pack(fill="x", padx=20, pady=(15, 5))
-        ctk.CTkLabel(top_frame, text=f"📂 目前位置: {format_display_path(initial_dir)}", font=ctk.CTkFont(size=15, weight="bold"), text_color=text_color).pack(side="left")
+        ctk.CTkLabel(top_frame, text=f"📂 目前位置: {format_display_path(initial_dir)}", font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_TITLE, weight="bold"), text_color=text_color).pack(side="left")
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=8)
         if self.allow_multiple:
-            ctk.CTkButton(btn_frame, text="✅ 全選", width=90, height=32, font=ctk.CTkFont(size=14, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.select_all).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="⬜ 全不選", width=90, height=32, font=ctk.CTkFont(size=14, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.deselect_all).pack(side="left")
+            ctk.CTkButton(btn_frame, text="✅ 全選", width=UI_FOLDER_ACTION_BTN_WIDTH, height=UI_FOLDER_ACTION_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_ACTION, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.select_all).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(btn_frame, text="⬜ 全不選", width=UI_FOLDER_ACTION_BTN_WIDTH, height=UI_FOLDER_ACTION_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_ACTION, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.deselect_all).pack(side="left")
 
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#FFFFFF" if bg_color=="#F4F6F7" else "#FAFAFA")
         self.scroll_frame.pack(fill="both", expand=True, padx=20, pady=10)
@@ -1685,7 +2413,7 @@ class FolderSelectDialog(ctk.CTkToplevel):
             subdirs = sorted([os.path.join(initial_dir, d) for d in os.listdir(initial_dir)
                               if os.path.isdir(os.path.join(initial_dir, d)) and not any(k in d.lower() for k in EXCLUDE_DIR_KEYWORDS)])
             if not subdirs:
-                ctk.CTkLabel(self.scroll_frame, text="此目錄底下沒有子資料夾！\n將直接處理本目錄。", font=ctk.CTkFont(size=15), text_color=text_color).pack(pady=40)
+                ctk.CTkLabel(self.scroll_frame, text="此目錄底下沒有子資料夾！\n將直接處理本目錄。", font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_TITLE), text_color=text_color).pack(pady=40)
                 self.folder_paths = [initial_dir]
                 var = tk.BooleanVar(value=True)
                 self.check_vars.append(var)
@@ -1694,7 +2422,7 @@ class FolderSelectDialog(ctk.CTkToplevel):
                     var = tk.BooleanVar(value=self.allow_multiple or index == 0)
                     command = None if self.allow_multiple else lambda selected_var=var: self.select_one(selected_var)
                     chk = ctk.CTkCheckBox(self.scroll_frame, text=f"📁 {os.path.basename(path)}", variable=var, command=command,
-                                          font=ctk.CTkFont(family="Calibri", size=15), fg_color=main_color, hover_color=hover_color, text_color=text_color)
+                                          font=ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_FONT_SIZE_FOLDER_CHECK), fg_color=main_color, hover_color=hover_color, text_color=text_color)
                     chk.pack(anchor="w", pady=8, padx=12)
                     self.check_vars.append(var)
                     self.folder_paths.append(path)
@@ -1703,8 +2431,8 @@ class FolderSelectDialog(ctk.CTkToplevel):
 
         bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
         bottom_frame.pack(fill="x", padx=20, pady=(10, 18))
-        ctk.CTkButton(bottom_frame, text="確認載入選取目錄", height=42, font=ctk.CTkFont(size=16, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.on_confirm).pack(side="right", padx=(10, 0))
-        ctk.CTkButton(bottom_frame, text="取消", height=42, font=ctk.CTkFont(size=16, weight="bold"), fg_color=stop_color, hover_color="#917774", command=self.destroy).pack(side="right")
+        ctk.CTkButton(bottom_frame, text="確認載入選取目錄", height=UI_FOLDER_BOTTOM_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_BOTTOM_BTN, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.on_confirm).pack(side="right", padx=(10, 0))
+        ctk.CTkButton(bottom_frame, text="取消", height=UI_FOLDER_BOTTOM_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_BOTTOM_BTN, weight="bold"), fg_color=stop_color, hover_color="#917774", command=self.destroy).pack(side="right")
 
     def select_all(self):
         if not self.allow_multiple:
@@ -1736,37 +2464,57 @@ class ImageOrganizerAppModern:
     def __init__(self, root):
         self.root = root
         self.root.title(f"Kairos - Media Organizer Pro")
-        self.root.geometry("1600x900")
-        self.root.minsize(1280, 720)
+        self.root.geometry(UI_MAIN_WINDOW_GEOMETRY)
+        self.root.minsize(UI_MAIN_WINDOW_MIN_WIDTH, UI_MAIN_WINDOW_MIN_HEIGHT)
+        if UI_START_MAXIMIZED:
+            self.root.after(0, self._maximize_on_startup)
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         self.queue = queue.Queue()
         self.processing = False
         self.stop_event = threading.Event()
         self.selected_src_folders = []
+        self.start_time = 0
+        self.processed_bytes = 0
 
-        title_font = ctk.CTkFont(family="Calibri", size=24, weight="bold")
-        app_font = ctk.CTkFont(family="Calibri", size=16)
-        btn_font = ctk.CTkFont(family="Calibri", size=20, weight="bold")
+        title_font = ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_TITLE_FONT_SIZE, weight="bold")
+        app_font = ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_APP_FONT_SIZE)
+        btn_font = ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_BUTTON_FONT_SIZE, weight="bold")
 
         self.src_var = tk.StringVar()
         self.dest_var = tk.StringVar()
         self.organize_by_time_var = tk.BooleanVar(value=True)    # ☑ 依照時間分資料夾
         self.normalize_name_var = tk.BooleanVar(value=True)      # ☑ 檔名正規化
-        self.separate_edited_var = tk.BooleanVar(value=False)    # ☐ 分離已編修過檔案
+        self.enable_geo_lookup_var = tk.BooleanVar(value=False)  # ☐ 預設關閉地理位置解析以提升速度
         self.copy_video_var = tk.BooleanVar(value=True)          # ☑ 掃描包含 VIDEO 檔
         self.copy_raw_var = tk.BooleanVar(value=False)           # ☐ 掃描包含 RAW 檔
-        self.overwrite_var = tk.BooleanVar(value=True)           # ☑ 強制覆蓋 (連拍保護與留新對決)
+        self.overwrite_var = tk.BooleanVar(value=False)          # ☐ 強制覆蓋 (連拍保護 & 留新不留舊)
+        self.performance_mode_var = tk.BooleanVar(value=False)   # ☐ 效能模式：精簡 LOG / 快速掃描 / GEO 失敗摘要
         self.theme_var = tk.StringVar(value=DEFAULT_THEME_NAME)
 
         self.load_config()
 
         # === 標題區 ===
         title_frame = ctk.CTkFrame(root, fg_color="transparent")
-        title_frame.pack(pady=(20, 10))
+        title_frame.pack(pady=(20, 8))
         ctk.CTkLabel(title_frame, text="Kairos - Media Organizer Pro", font=title_font).pack(side="top")
-        self.lbl_subtitle = ctk.CTkLabel(title_frame, text=f"Build {VERSION}  |  EXIF 解析: {'啟用' if EXIFREAD_AVAILABLE else '未安裝'}  |  PIL 圖片解析: {'啟用' if PIL_AVAILABLE else '未安裝'}  |  Hachoir 影片解析: {'啟用' if HACHOIR_AVAILABLE else '未安裝'}", font=ctk.CTkFont(family="Calibri", size=12))
-        self.lbl_subtitle.pack(side="top")
+        subtitle_font = ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_SUBTITLE_FONT_SIZE)
+        self.lbl_build = ctk.CTkLabel(title_frame, text=f"Build {VERSION}", font=subtitle_font, height=UI_SUBTITLE_BUILD_HEIGHT)
+        self.lbl_build.pack(side="top", pady=(0, 0))
+        self.lbl_subtitle = ctk.CTkLabel(
+            title_frame,
+            text=f"exifread 圖片解析: {'啟用' if EXIFREAD_AVAILABLE else '未安裝'}  |  PIL/Pillow 圖片解析: {'啟用' if PIL_AVAILABLE else '未安裝'}  |  pillow-heif 圖片解析: {'啟用' if PILLOW_HEIF_AVAILABLE else '未安裝'}",
+            font=subtitle_font,
+            height=UI_SUBTITLE_LINE_HEIGHT
+        )
+        self.lbl_subtitle.pack(side="top", pady=(0, 0))
+        self.lbl_subtitle2 = ctk.CTkLabel(
+            title_frame,
+            text=f"Hachoir 影片解析: {'啟用' if HACHOIR_AVAILABLE else '未安裝'}  |  reverse_geocoder 地理解析: {'啟用' if RG_AVAILABLE else '未安裝'}  |  exiftool 圖片解析: {'啟用' if EXIFTOOL_AVAILABLE else '未安裝'}",
+            font=subtitle_font,
+            height=UI_SUBTITLE_LINE_HEIGHT
+        )
+        self.lbl_subtitle2.pack(side="top", pady=(0, 0))
 
         # === 主要輸入區塊 ===
         frame_top = ctk.CTkFrame(root, corner_radius=10)
@@ -1775,32 +2523,32 @@ class ImageOrganizerAppModern:
         frame_top.grid_columnconfigure(1, weight=1)
         frame_top.grid_columnconfigure(2, weight=0)
 
-        row_height = 35
+        row_height = UI_ROW_HEIGHT
 
-        # 來源
-        self.lbl_src = ctk.CTkLabel(frame_top, text="來源目錄 (Source):", font=app_font)
-        self.lbl_src.grid(row=0, column=0, padx=(20, 10), pady=(20, 10), sticky="e")
+        # === 來源 ===
+        self.lbl_src = ctk.CTkLabel(frame_top, text="來源目錄 (Source Dir):", font=app_font)
+        self.lbl_src.grid(row=0, column=0, padx=(20, 10), pady=(20, 7), sticky="e")
         self.entry_src = ctk.CTkEntry(frame_top, textvariable=self.src_var, font=app_font, height=row_height)
-        self.entry_src.grid(row=0, column=1, padx=(0, 10), pady=(20, 10), sticky="ew")
+        self.entry_src.grid(row=0, column=1, padx=(0, 10), pady=(20, 7), sticky="ew")
         btn_frame_src = ctk.CTkFrame(frame_top, fg_color="transparent")
-        btn_frame_src.grid(row=0, column=2, padx=(0, 20), pady=(20, 10), sticky="w")
-        self.btn_browse_src = ctk.CTkButton(btn_frame_src, text="🔍 瀏覽", width=95, height=row_height, font=app_font, command=self.browse_src)
-        self.btn_browse_src.pack(side="left", padx=(0, 5))
-        self.btn_view_src = ctk.CTkButton(btn_frame_src, text="📂 檢視", width=35, height=row_height, font=app_font, command=lambda: open_folder(self.src_var, self.selected_src_folders))
+        btn_frame_src.grid(row=0, column=2, padx=(0, 15), pady=(20, 7), sticky="w")
+        self.btn_browse_src = ctk.CTkButton(btn_frame_src, text="🔍 瀏覽", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=self.browse_src)
+        self.btn_browse_src.pack(side="left", padx=(0, 10))
+        self.btn_view_src = ctk.CTkButton(btn_frame_src, text="📂 檢視", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=lambda: open_folder(self.src_var, self.selected_src_folders))
         self.btn_view_src.pack(side="left")
 
-        # 輸出
-        self.lbl_dest = ctk.CTkLabel(frame_top, text="輸出目錄 (Output):", font=app_font)
-        self.lbl_dest.grid(row=1, column=0, padx=(20, 10), pady=(10, 10), sticky="e")
-        ctk.CTkEntry(frame_top, textvariable=self.dest_var, font=app_font, height=row_height).grid(row=1, column=1, padx=(0, 10), pady=(10, 10), sticky="ew")
+        # === 輸出 ===
+        self.lbl_dest = ctk.CTkLabel(frame_top, text="輸出目錄 (Output Dir):", font=app_font)
+        self.lbl_dest.grid(row=1, column=0, padx=(20, 10), pady=(7, 10), sticky="e")
+        ctk.CTkEntry(frame_top, textvariable=self.dest_var, font=app_font, height=row_height).grid(row=1, column=1, padx=(0, 10), pady=(7, 10), sticky="ew")
         btn_frame_dest = ctk.CTkFrame(frame_top, fg_color="transparent")
-        btn_frame_dest.grid(row=1, column=2, padx=(0, 20), pady=(10, 10), sticky="w")
-        self.btn_browse_dest = ctk.CTkButton(btn_frame_dest, text="🔍 瀏覽", width=95, height=row_height, font=app_font, command=self.browse_dest)
-        self.btn_browse_dest.pack(side="left", padx=(0, 5))
-        self.btn_view_dest = ctk.CTkButton(btn_frame_dest, text="📂 檢視", width=35, height=row_height, font=app_font, command=lambda: open_folder(self.dest_var))
+        btn_frame_dest.grid(row=1, column=2, padx=(0, 15), pady=(7, 10), sticky="w")
+        self.btn_browse_dest = ctk.CTkButton(btn_frame_dest, text="🔍 瀏覽", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=self.browse_dest)
+        self.btn_browse_dest.pack(side="left", padx=(0, 10))
+        self.btn_view_dest = ctk.CTkButton(btn_frame_dest, text="📂 檢視", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=lambda: open_folder(self.dest_var))
         self.btn_view_dest.pack(side="left")
 
-        # 進階
+        # === 進階 ===
         self.lbl_mode = ctk.CTkLabel(frame_top, text="處理模式 (Mode):", font=app_font)
         self.lbl_mode.grid(row=2, column=0, padx=(20, 10), pady=(10, 5), sticky="e")
         mode_frame = ctk.CTkFrame(frame_top, fg_color="transparent")
@@ -1810,9 +2558,9 @@ class ImageOrganizerAppModern:
         self.norm_chk.pack(side="left", padx=(0, 20))
         self.time_chk = ctk.CTkCheckBox(mode_frame, text="依照年月區分資料夾 (YYYY_MM)", variable=self.organize_by_time_var, font=app_font)
         self.time_chk.pack(side="left", padx=(0, 20))
-        self.sep_edit_chk = ctk.CTkCheckBox(mode_frame, text="分離已編修過檔案", variable=self.separate_edited_var, font=app_font)
-        self.sep_edit_chk.pack(side="left", padx=(0, 20))
-        self.sep_edit_chk.pack_forget()  # 編修分流由 Two-Pass 取代，不再提供舊選項。
+
+        self.geo_checkbox = ctk.CTkCheckBox(mode_frame, text="解析地理位置與地圖 (會耗費較多時間)", variable=self.enable_geo_lookup_var, font=app_font)
+        self.geo_checkbox.pack(side="left", padx=(0, 20))
 
         self.lbl_opt = ctk.CTkLabel(frame_top, text="動作選項 (Options):", font=app_font)
         self.lbl_opt.grid(row=3, column=0, padx=(20, 10), pady=(5, 20), sticky="e")
@@ -1823,17 +2571,19 @@ class ImageOrganizerAppModern:
         self.vid_checkbox.pack(side="left", padx=(0, 15))
         self.raw_checkbox = ctk.CTkCheckBox(options_frame, text="掃描包含 RAW 檔", variable=self.copy_raw_var, font=app_font)
         self.raw_checkbox.pack(side="left", padx=(0, 15))
-        self.overwrite_checkbox = ctk.CTkCheckBox(options_frame, text="強制覆蓋時間戳相同的照片 (連拍保護與留新不留舊)", variable=self.overwrite_var, font=app_font)
+        self.overwrite_checkbox = ctk.CTkCheckBox(options_frame, text="強制覆蓋時間戳相同的照片 (連拍保護 & 留新不留舊)", variable=self.overwrite_var, font=app_font)
         self.overwrite_checkbox.pack(side="left", padx=(0, 15))
+        self.performance_checkbox = ctk.CTkCheckBox(options_frame, text="效能模式 (精簡 LOG / 快速掃描 / GEO 失敗摘要)", variable=self.performance_mode_var, font=app_font)
+        self.performance_checkbox.pack(side="left", padx=(0, 15))
 
-        # 主題選擇
+        # === 主題選擇 ===
         self.theme_menu = ctk.CTkOptionMenu(
             options_frame,
             values=list(THEMES.keys()),
             variable=self.theme_var,
             command=self.change_theme,
             font=app_font,
-            width=160
+            width=UI_THEME_MENU_WIDTH
         )
         self.theme_menu.pack(side="right", padx=(0, 0))
         self.lbl_theme = ctk.CTkLabel(options_frame, text="主題配色", font=app_font)
@@ -1846,24 +2596,24 @@ class ImageOrganizerAppModern:
         self.status_top_frame = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.status_top_frame.pack(side='top', fill='x', pady=(0, 8))
 
-        self.status_label = ctk.CTkLabel(self.status_top_frame, text="準備就緒", font=ctk.CTkFont(family="Calibri", size=15), anchor='w')
+        self.status_label = ctk.CTkLabel(self.status_top_frame, text="準備就緒", font=ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_APP_FONT_SIZE), anchor='w')
         self.status_label.pack(side='left', fill='x', expand=True)
 
-        self.metrics_label = ctk.CTkLabel(self.status_top_frame, text="時間: 00:00 | 大小: 0 B | 速度: 0 B/s", font=ctk.CTkFont(family="Calibri", size=14, weight="bold"), anchor='e')
+        self.metrics_label = ctk.CTkLabel(self.status_top_frame, text="時間: 00:00 | 大小: 0 B | 速度: 0 B/s", font=ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_STATUS_FONT_SIZE, weight="bold"), anchor='e')
         self.metrics_label.pack(side='right')
 
         self.progress_container = ctk.CTkFrame(self.status_frame, fg_color="transparent")
         self.progress_container.pack(side='top', fill='x')
 
-        self.progress_bar = ctk.CTkProgressBar(self.progress_container, height=14)
+        self.progress_bar = ctk.CTkProgressBar(self.progress_container, height=UI_PROGRESS_HEIGHT)
         self.progress_bar.set(0)
         self.progress_bar.pack(side='left', fill='x', expand=True, padx=(0, 10))
 
-        self.progress_pct_label = ctk.CTkLabel(self.progress_container, text="0%", font=ctk.CTkFont(family="Calibri", size=14, weight="bold"))
+        self.progress_pct_label = ctk.CTkLabel(self.progress_container, text="0%", font=ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_STATUS_FONT_SIZE, weight="bold"))
         self.progress_pct_label.pack(side='right')
 
         # === 即時文字日誌區 ===
-        self.log_textbox = ctk.CTkTextbox(root, height=150, font=("Consolas", 12), border_width=1)
+        self.log_textbox = ctk.CTkTextbox(root, height=UI_LOGBOX_HEIGHT, font=(UI_LOG_FONT_FAMILY, UI_LOG_FONT_SIZE), border_width=1)
         self.log_textbox.pack(pady=(15, 5), padx=25, fill="both", expand=True)
         self.log_textbox.insert("0.0", "等待執行...\n")
         self.log_textbox.configure(state="disabled")
@@ -1871,33 +2621,26 @@ class ImageOrganizerAppModern:
         # === 執行按鈕 ===
         frame_btn = ctk.CTkFrame(root, fg_color="transparent")
         frame_btn.pack(pady=(10, 20), padx=25, fill="x")
-        self.start_btn = ctk.CTkButton(frame_btn, text="▶ 開始執行", font=btn_font, height=55, corner_radius=8, command=self.toggle_processing)
+        self.start_btn = ctk.CTkButton(frame_btn, text="▶ 開始執行", font=btn_font, height=UI_START_BTN_HEIGHT, corner_radius=8, command=self.toggle_processing)
         self.start_btn.pack(expand=True, fill="x")
 
-        self.organize_by_time_var.trace_add("write", self.update_ui_dependencies)
-        self.update_ui_dependencies()
         # 套用初始主題顏色
         self.apply_theme_colors(self.theme_var.get())
 
         # 在初始化最後，呼叫圖示設定函式
         self.set_app_icon()
 
-    def set_app_icon(self):
-        # 1. 定義圖示檔案的路徑 (處理打包後與開發模式的路徑)
-        # 假設 icon.ico 放在與程式同目錄
-        icon_path = resource_path("icon.ico")
+    def _maximize_on_startup(self):
+        try:
+            if sys.platform == "win32":
+                self.root.state("zoomed")
+            else:
+                self.root.attributes("-zoomed", True)
+        except Exception:
+            pass
 
-        # 2. 檢查檔案是否存在，防止找不到檔案直接報錯退出
-        if os.path.exists(icon_path):
-            try:
-                # 嘗試設定圖示
-                self.root.iconbitmap(icon_path)
-            except Exception as e:
-                print(f"圖示設定失敗，自動忽略: {e}")
-                # 這裡不執行任何操作，Tkinter 會自動保持預設圖示
-        else:
-            # 如果檔案根本不存在 (雙擊時路徑找不到)，直接跳過
-            # 這樣程式就會維持預設的羽毛圖示，而不會退出
+    def set_app_icon(self):
+        if not apply_window_icon(self.root):
             print("未找到圖示檔案，使用系統預設圖示。")
 
     def apply_theme_colors(self, theme_name):
@@ -1907,9 +2650,12 @@ class ImageOrganizerAppModern:
 
         t = THEMES[theme_name]
 
-        # 背景與文字
+        # === 背景與文字 ===
         self.root.configure(fg_color=t["BG"])
+        apply_windows_titlebar_theme(self.root, t["MAIN"])
+        self.lbl_build.configure(text_color=t["TEXT"])
         self.lbl_subtitle.configure(text_color=t["TEXT"])
+        self.lbl_subtitle2.configure(text_color=t["TEXT"])
         self.lbl_src.configure(text_color=t["TEXT"])
         self.lbl_dest.configure(text_color=t["TEXT"])
         self.lbl_mode.configure(text_color=t["TEXT"])
@@ -1919,40 +2665,32 @@ class ImageOrganizerAppModern:
         self.metrics_label.configure(text_color=t["TEXT"])
         self.progress_pct_label.configure(text_color=t["TEXT"])
 
-        # 按鈕與選單
+        # === 按鈕與選單 ===
         self.btn_browse_src.configure(fg_color=t["MAIN"], hover_color=t["HOVER"])
         self.btn_browse_dest.configure(fg_color=t["MAIN"], hover_color=t["HOVER"])
         self.btn_view_src.configure(fg_color=t["SUB"], hover_color=t["HOVER"])
         self.btn_view_dest.configure(fg_color=t["SUB"], hover_color=t["HOVER"])
         self.theme_menu.configure(fg_color=t["MAIN"], button_color=t["MAIN"], button_hover_color=t["HOVER"])
 
-        # Checkboxes
-        for chk in [self.norm_chk, self.time_chk, self.sep_edit_chk, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox]:
+        for chk in [self.norm_chk, self.time_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
             chk.configure(fg_color=t["MAIN"], hover_color=t["HOVER"], text_color=t["TEXT"])
 
-        # 執行按鈕 (需判斷是否在執行中)
+        # === 執行按鈕 (需判斷是否在執行中) ===
         if self.processing:
             self.start_btn.configure(fg_color=t["STOP"], hover_color=t["HOVER"])
         else:
             self.start_btn.configure(fg_color=t["MAIN"], hover_color=t["HOVER"])
 
-        # 進度條與日誌
+        # === 進度條與日誌 ===
         self.progress_bar.configure(fg_color=t["BORDER"], progress_color=t["PROGRESS"])
 
-        # 日誌區塊稍微淺色處理以適配莫蘭迪色背景
+        # === 日誌區塊稍微淺色處理以適配莫蘭迪色背景 ===
         log_bg = "#FFFFFF" if t["BG"] == "#F4F6F7" else "#FAFAFA"
         self.log_textbox.configure(fg_color=log_bg, border_color=t["BORDER"], text_color=t["TEXT"])
 
     def change_theme(self, new_theme):
         self.apply_theme_colors(new_theme)
         self.save_config()
-
-    def update_ui_dependencies(self, *args):
-        if not self.organize_by_time_var.get() or not EXIFREAD_AVAILABLE:
-            self.separate_edited_var.set(False)
-            self.sep_edit_chk.configure(state="disabled")
-        else:
-            self.sep_edit_chk.configure(state="normal")
 
     def load_config(self):
         config = configparser.ConfigParser()
@@ -1975,12 +2713,11 @@ class ImageOrganizerAppModern:
                         self.selected_src_folders = self.selected_src_folders[:1]
                         self.src_var.set(format_display_path(self.selected_src_folders[0]))
                     self.normalize_name_var.set(config.getboolean('Settings', 'NormalizeName', fallback=True))
+                    self.enable_geo_lookup_var.set(config.getboolean('Settings', 'EnableGeoLookup', fallback=False))
+                    self.performance_mode_var.set(config.getboolean('Settings', 'PerformanceMode', fallback=False))
                     self.copy_video_var.set(config.getboolean('Settings', 'CopyVideo', fallback=True))
                     self.copy_raw_var.set(config.getboolean('Settings', 'CopyRAW', fallback=False))
-                    self.separate_edited_var.set(
-                        EXIFREAD_AVAILABLE and config.getboolean('Settings', 'SeparateEdited', fallback=False)
-                    )
-                    self.overwrite_var.set(config.getboolean('Settings', 'Overwrite', fallback=True))
+                    self.overwrite_var.set(config.getboolean('Settings', 'Overwrite', fallback=False))
                     saved_theme = config.get('Settings', 'Theme', fallback=DEFAULT_THEME_NAME)
                     if saved_theme in THEMES: self.theme_var.set(saved_theme)
             except Exception: pass
@@ -1992,9 +2729,10 @@ class ImageOrganizerAppModern:
             'Destination': self.dest_var.get().strip(' "\''),
             'OrganizeByTime': str(self.organize_by_time_var.get()),
             'NormalizeName': str(self.normalize_name_var.get()),
+            'EnableGeoLookup': str(self.enable_geo_lookup_var.get()),
+            'PerformanceMode': str(self.performance_mode_var.get()),
             'CopyVideo': str(self.copy_video_var.get()),
             'CopyRAW': str(self.copy_raw_var.get()),
-            'SeparateEdited': str(self.separate_edited_var.get()),
             'Overwrite': str(self.overwrite_var.get()),
             'Theme': str(self.theme_var.get())
         }
@@ -2060,9 +2798,10 @@ class ImageOrganizerAppModern:
                     self.progress_bar.set(data)
                     self.progress_pct_label.configure(text=f"{int(data * 100)}%")
                 elif msg_type == 'metrics':
-                    elapsed, size_bytes = data
-                    speed = size_bytes / elapsed if elapsed > 0 else 0
-                    self.metrics_label.configure(text=f"時間: {format_time(elapsed)} | 大小: {format_size(size_bytes)} | 速度: {format_size(speed)}/s")
+                    if isinstance(data, tuple):
+                        self.processed_bytes = data[1]
+                    else:
+                        self.processed_bytes = data
                 elif msg_type == 'reset':
                     self.reset_ui()
                     return
@@ -2070,26 +2809,52 @@ class ImageOrganizerAppModern:
                     title, content = data
                     level = msg[2] if len(msg) > 2 else 'info'
                     reports = msg[3] if len(msg) > 3 else None
+                    index_report_path = msg[4] if len(msg) > 4 else None
                     t = THEMES[self.theme_var.get()]
-                    ModernMessageBox(self.root, title, content, level, t, html_reports=reports)
+                    ModernMessageBox(self.root, title, content, level, t, html_reports=reports, index_report_path=index_report_path)
         except queue.Empty: pass
         if self.processing: self.root.after(100, self.check_queue)
 
+    def update_timer(self):
+        """GUI 獨立計時迴圈：不受背景運算卡頓影響，每 0.5 秒直接讀取系統時鐘刷新介面"""
+        if self.processing and self.start_time > 0:
+            elapsed = time.time() - self.start_time
+            speed = self.processed_bytes / elapsed if elapsed > 0 else 0
+            self.metrics_label.configure(
+                text=f"時間: {format_time(elapsed)} | 大小: {format_size(self.processed_bytes)} | 速度: {format_size(speed)}/s"
+            )
+            # 讓 Tkinter 主介面每 500 毫秒 (0.5秒) 自動呼叫自己一次
+            self.root.after(500, self.update_timer)
+
     def reset_ui(self):
         self.processing = False
-        self.stop_event.clear()
-        self.status_label.configure(text="準備就緒")
-        self.progress_bar.set(0)
-        self.progress_pct_label.configure(text="0%")
-        self.metrics_label.configure(text="時間: 00:00 | 大小: 0 B | 速度: 0 B/s")
 
+        # 1. 在停止計時前，計算並「定格」最後的總耗時與平均速度在畫面上
+        if self.start_time > 0:
+            final_elapsed = time.time() - self.start_time
+            speed = self.processed_bytes / final_elapsed if final_elapsed > 0 else 0
+            self.metrics_label.configure(
+                text=f"時間: {format_time(final_elapsed)} | 大小: {format_size(self.processed_bytes)} | 平均速度: {format_size(speed)}/s"
+            )
+        self.start_time = 0  # 讓 update_timer 停止循環
+
+        # 2. 判斷是順利完成還是被中斷，呈現對應的最終狀態
+        if self.stop_event.is_set():
+            self.status_label.configure(text="🛑 處理已中斷")
+        else:
+            self.status_label.configure(text="✅ 處理完畢！可於下方日誌檢視細節或點擊彈窗開啟報告")
+            self.progress_bar.set(1.0)
+            self.progress_pct_label.configure(text="100%")
+
+        self.stop_event.clear()
+
+        # 3. 恢復介面按鈕與核取方塊的互動功能 (維持原樣)
         t = THEMES[self.theme_var.get()]
         self.start_btn.configure(state='normal', text="▶ 開始執行", fg_color=t["MAIN"], hover_color=t["HOVER"])
-        for chk in [self.time_chk, self.norm_chk, self.vid_checkbox, self.raw_checkbox, self.sep_edit_chk, self.overwrite_checkbox]:
+        for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
             chk.configure(state='normal')
         self.theme_menu.configure(state='normal')
         self.btn_browse_src.configure(state='normal')
-        self.update_ui_dependencies()
 
     def toggle_processing(self):
         if self.processing:
@@ -2106,9 +2871,6 @@ class ImageOrganizerAppModern:
             messagebox.showwarning("警告", "未啟用依年月整理時，來源與目的資料夾為 1:1，請只保留一個來源資料夾。")
             return
 
-        if not EXIFREAD_AVAILABLE:
-            self.separate_edited_var.set(False)
-
         if not dest:
             messagebox.showwarning("警告", "請先使用瀏覽按鈕指定輸出目錄！")
             return
@@ -2118,9 +2880,21 @@ class ImageOrganizerAppModern:
             return
 
         try:
+            # 檢查目標目錄是否包含任何檔案
             if any(Path(dest).iterdir()):
-                messagebox.showerror("Destination must be empty", "Please select a completely empty destination folder. This keeps the run metadata and reports complete.")
-                return
+                # 直接開啟目錄並跳出提示，不需詢問使用者
+                messagebox.showwarning(
+                    "目錄存在其他檔案，可能有覆蓋風險！",
+                    "指定的輸出目錄不為空，建議使用空的資料夾以確保報告完整性。\n\n程式將為您開啟該目錄以利檢查。"
+                )
+
+                # 直接執行開啟目錄的動作
+                if os.path.exists(dest):
+                    if sys.platform == "win32": os.startfile(dest)
+                    elif sys.platform == "darwin": subprocess.Popen(["open", dest])
+                    else: subprocess.Popen(["xdg-open", dest])
+
+                return # 終止本次處理啟動
         except OSError as e:
             messagebox.showerror("Destination error", f"Cannot read destination folder: {e}")
             return
@@ -2140,7 +2914,7 @@ class ImageOrganizerAppModern:
 
         t = THEMES[self.theme_var.get()]
         self.start_btn.configure(text="🛑 停止處理", fg_color=t["STOP"], hover_color=t["HOVER"])
-        for chk in [self.time_chk, self.norm_chk, self.sep_edit_chk, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox]:
+        for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
             chk.configure(state='disabled')
         self.theme_menu.configure(state='disabled')
         self.btn_browse_src.configure(state='disabled')
@@ -2150,10 +2924,13 @@ class ImageOrganizerAppModern:
         self.progress_bar.configure(mode="determinate")
         self.progress_bar.set(0)
         self.progress_pct_label.configure(text="0%")
+        self.start_time = time.time()
+        self.processed_bytes = 0
+        self.update_timer()
 
         self.thread = threading.Thread(
             target=threaded_process_images,
-            args=(self.selected_src_folders, dest, self.organize_by_time_var.get(), self.normalize_name_var.get(), self.separate_edited_var.get(), self.copy_video_var.get(), self.copy_raw_var.get(), self.overwrite_var.get(), self.queue, self.stop_event),
+            args=(self.selected_src_folders, dest, self.organize_by_time_var.get(), self.normalize_name_var.get(), self.enable_geo_lookup_var.get(), self.copy_video_var.get(), self.copy_raw_var.get(), self.overwrite_var.get(), self.performance_mode_var.get(), self.queue, self.stop_event),
             daemon=True
         )
         self.thread.start()

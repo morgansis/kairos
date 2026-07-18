@@ -1,6 +1,6 @@
 """
 ================================================================================
-媒體檔案自動化整理與劇院級檢視工具 (Media Organizer Pro) - v2026-07-17
+媒體檔案自動化整理與劇院級檢視工具 (Media Organizer Pro) - v2026-07-18
 ================================================================================
 Designed for creators, this tool provides safe, lossless media archiving
 with millisecond burst protection, intelligent deduplication, and a full-screen
@@ -16,28 +16,42 @@ interactive lightbox experience.
      點擊瀏覽來源目錄時，系統自動展開彈窗，列出該母目錄底下的所有子資料夾，使用者可勾選
      多個子資料夾進行批次順序處理，省去重複操作的繁瑣流程。
   2. 毫秒級連拍保護與物理去重 (Smart Burst & Duplicate Protection)：
-     - 物理實體過濾：在處理前會自動進行檔案大小 (Bytes) 與首尾區塊 (Chunks) 內容對比，
+     - 第一層物理實體過濾：在處理前自動進行檔案大小 (Bytes) 與完整 SHA-256 內容對比，
        若確認為完全相同的實體檔案則直接優雅略過，杜絕重複執行時產生冗餘的 `-1` 檔案。
-     - 毫秒連拍辨識：透過 EXIF 亞秒/毫秒 (SubSecTimeOriginal) + 相機序號 + 小於 1 秒間隔，
-       區分連拍序列與同秒衝突；同秒連拍衝突會優先掛上三位毫秒後綴，避免前後秒邊界被誤判。
+     - 第二層毫秒連拍辨識：透過 EXIF 亞秒/毫秒 (SubSecTimeOriginal) + 相機序號 + 小於 1 秒間隔，
+       區分連拍序列與同秒衝突；同秒連拍衝突優先掛上三位毫秒後綴，避免前後秒邊界被誤判。
+     - 第三層修改時間裁決：非連拍同名衝突則依修改時間 (mtime) 保留較新修圖版本在前台。
   3. 彈性時間分類與更新取代機制：
      - 支援將檔名正規化為「YYYY-MM-DD HH.MM.SS」標準格式，並自動依年份與月份建立資料夾。
-     - 支援彈性「地理位置解析開關」，關閉時極速掃描；開啟時將地圖資訊直接整合進月份視覺報表。
+     - 支援彈性「地理位置解析開關」，關閉時極速掃描；開啟時將地圖資訊整合進月份視覺報表。
      - 若勾選「強制覆蓋」，同毫秒重複只保留一張在上層（名稱正規化），其餘移至 `candidate`
-       並以 `-1/-2...` 尾綴保留；非連拍同名衝突則依修改時間保留較新版本。
+       並以 `-1/-2...` 尾綴保留。
   4. 外掛異常精準攔截與報表整合：
      - 自動捕捉 exifread、Pillow、hachoir 等第三方解析外掛所產生的警告與錯誤，
        直接關聯至當前處理檔案並同步整合進 CSV/HTML 報表中的「插件訊息」欄位，不再繁雜刷屏。
 
-二、 劇院級互動 HTML 報告與懸浮燈箱 (Interactive Report & Overlay Lightbox)：
+二、 雙流空間快取與批量解析 (Dual-Stream Spatial Cache & Batch Geocoding)：
+  1. 智能快取繼承機制 (Snowball Inheritance)：
+     - 執行前自動向「來源目錄」、「來源上一層母目錄」及「輸出目錄」搜尋並繼承 `_manifest_geo.json`，
+       多源歸檔或二次整理時可於毫秒內重用歷史反查成果，達成零運算極速重用。
+  2. 非對稱雙流座標設計：
+     - 行政地名反查 (Key) 採用小數點後 3 位精度 (約 100 米)，同景點千張照片僅需反查一次。
+     - 導航地圖網址 (URL) 現場直接由 EXIF 生成小數點後 4 位精度 (約 10 米)，導航準確毫無耗損。
+  3. 極速 C++ 批量矩陣查詢：
+     - 廢除單筆查詢迴圈，將所有未命中的座標打包為 List，一次送入 reverse_geocoder 的 C++
+       多執行緒 K-D Tree 進行批量反查，效能提升數十倍。
+  4. 全域處理數據看板 (Performance Dashboard)：
+     - 總報表與各月份 HTML 報告頂端均內嵌精美戰情看板，即時展示處理耗時、複製去重統計、
+       地理快取命中率 (%) 與 C++ 批量查詢次數。
+
+三、 劇院級互動 HTML 報告與懸浮燈箱 (Interactive Report & Overlay Lightbox)：
   1. 根目錄集中式報告與免外掛總報表
      - 各月份處理結果會直接於「輸出根目錄」生成單一 HTML 視覺化報告（如 2026_04_media_report.html），
        內嵌 Intersection Observer 延遲載入 (Lazy Load) 技術與地圖跳轉按鈕，萬張照片也順暢不卡頓。
-    - 同時產出 `_index.html` 免外掛互動式總報表，支援關鍵字搜尋與分類過濾。
+     - 同時產出 `_index.html` 免外掛互動式總報表，支援關鍵字搜尋與分類過濾。
   2. 究極滿版懸浮燈箱 (100vw / 100vh Overlay Lightbox)：
      - 點擊照片或影片即進入全螢幕燈箱，畫面直接擴展至瀏覽器視窗的 100% 極限滿版，絕不浪費螢幕空間。
-     - 控制資訊（張數、檔名、類別、刪除按鈕與箭頭）採取「半透明漸層懸浮列 (Overlay)」設計，
-       優雅重疊於影像上下兩端，不干擾主體視覺。
+     - 控制資訊採取「半透明漸層懸浮列 (Overlay)」設計，優雅重疊於影像上下兩端，不干擾主體視覺。
      - 影片直接串流：內嵌 <video> 播放器，支援 MP4、MOV 等格式在燈箱中直接高畫質播放。
   3. 跨平台沙盒突破與安全清理機制：
      - 瀏覽器端提供「🗑️ 標記為待刪除」功能。為突破瀏覽器本地沙盒安全限制，報告上方提供
@@ -45,7 +59,7 @@ interactive lightbox experience.
      - 點擊後即可將對應的 `del /f /q` 或 `rm -f` 終端機語法複製到剪貼簿，直接打開終端機
        貼上即可一鍵清除所有標記的廢片。
 
-三、 現代化介面與安全中斷機制：
+四、 現代化介面與安全中斷機制：
   1. 莫蘭迪美學 UI：全系列視窗與彈窗皆完美整合晨霧灰藍、乾燥玫瑰、鼠尾草綠等專業配色，
      字體間距嚴格調校對齊，提供視覺舒適的深層體驗。
   2. 精巧計數器與報告啟動器：處理完畢後，系統會彈出視覺俐落的精緻通知視窗，底端自動產出
@@ -156,7 +170,7 @@ THEMES = {
 # 預設啟動色系
 DEFAULT_THEME_NAME = "晨霧灰藍 (沈穩)"
 # ===================== 程式設定 =====================
-VERSION = "2026-07-17"
+VERSION = "2026-07-18"
 
 # ===================== UI tuning constants =====================
 UI_FONT_FAMILY = "Calibri"
@@ -233,7 +247,7 @@ RAW_EXTENSIONS = {'.dng', '.cr2', '.cr3', '.nef', '.arw', '.raf', '.orf', '.rw2'
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.wmv', '.flv', '.m4v', '.3gp', '.mts', '.m2ts', '.mpg'}
 GEO_LOOKUP_EXTENSIONS = {'.jpg', '.jpeg', '.tif', '.tiff', '.heic', '.heif'}
 EXCLUDE_DIR_KEYWORDS = ['helper.lrdata', 'previews.lrdata', 'smart previews.lrdata', 'lrcat-data', 'System Volume Information', '$RECYCLE.BIN']
-IGNORED_EXTENSIONS = ['.lrcat', '.lrdata', '.tmp', '.ds_store', '.db', '.xls', '.xlsx', '.doc', '.docx', '.pdf']
+IGNORED_EXTENSIONS = ['.lrcat', '.lrdata', '.tmp', '.ds_store', '.db', '.xls', '.xlsx', '.doc', '.docx', '.pdf', '.html', '.csv', '.txt', '.json', '.js', '.css']
 PLACEHOLDER = "-"
 
 TIMESTAMP_STEM_RE = re.compile(r'^(?P<base>\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2})(?P<suffix>-(?:\d{1,6}(?:-\d+)?|u\d+|c\d+))?$')
@@ -247,7 +261,18 @@ EXIF_SERIAL_TAG_KEYS = (
     'EXIF SerialNumber',
 )
 CAPTURE_META_CACHE = {}
-# ===================================================
+
+# ==================== 全域空間快取與戰情計數器 ====================
+GEO_COORD_CACHE = {}
+GEO_PERF_STATS = {
+    'queries': 0,
+    'cache_hits': 0,
+    'new_lookups': 0,
+    'copied': 0,
+    'skipped': 0,
+    'total_time': 0.0
+}
+# =================================================================
 
 class PluginWarningCapturer:
     """專門用來攔截第三方外掛 (exifread, hachoir, PIL) 輸出警告與錯誤的攔截器"""
@@ -456,6 +481,24 @@ def is_identical_file(src_path, target_path):
     except Exception:
         return False
 
+def find_identical_in_target(src_path, target_dir, stem, ext):
+    """
+    在目標目錄中搜尋主檔名相同及其帶有序號後綴 (-1, -2, -c1 等) 的所有檔案，
+    進行完整 SHA-256 實體比對，若存在相同檔案則直接回傳該目標檔案路徑。
+    """
+    # 1. 優先比對主檔名本身 (如 filename.jpg)
+    base_file = target_dir / f"{stem}{ext}"
+    if base_file.exists() and is_identical_file(src_path, base_file):
+        return base_file
+
+    # 2. 掃描帶有序號或連拍後綴的變體檔案 (如 filename-1.jpg, filename-2.jpg, filename-c1.jpg)
+    # 使用 glob 尋找同一 stem 開頭且相同副檔名的所有候選者
+    for candidate in target_dir.glob(f"{stem}-*{ext}"):
+        if candidate.is_file() and is_identical_file(src_path, candidate):
+            return candidate
+
+    return None
+
 def file_sha256(file_path, chunk_size=1024 * 1024):
     digest = hashlib.sha256()
     with open(file_path, 'rb') as f:
@@ -560,95 +603,79 @@ def get_camera_model(file_path):
                 pass
     return "-"
 
-# === 新增：全域座標快取字典，避免對同一景點重複進行耗時的空間樹搜尋 ===
-GEO_COORD_CACHE = {}
+# ==================== 智能快取繼承與封存模組 ====================
+def load_and_merge_geo_caches(source_folders, dest_dir, log_callback=None):
+    """從所有來源與目的目錄 (及其上一層母目錄) 中尋找並繼承舊的地理快取"""
+    cache_files_found = set()
 
-def _deprecated_get_exif_location(file_path, log_callback=None):
-    """讀取經緯度並回傳 (城市/行政區文字地名, Google Maps 網址, 狀態, 失敗原因)。"""
-    display_path = format_display_path(file_path)
+    # 1. 檢查目標輸出目錄
+    dest_cache = Path(dest_dir) / "_manifest_geo.json"
+    if dest_cache.exists():
+        cache_files_found.add(dest_cache)
 
-    def geo_log(reason, detail=None):
-        if not log_callback:
-            return
-        msg = f"[GEO] {display_path} | {reason}"
-        if detail:
-            msg += f" | {detail}"
+    # 2. 檢查所有勾選的來源目錄 (及其上一層母目錄，防止勾選子資料夾時遺漏)
+    for src in source_folders:
+        src_path = Path(src)
+        for check_dir in [src_path, src_path.parent]:
+            src_cache = check_dir / "_manifest_geo.json"
+            if src_cache.exists():
+                cache_files_found.add(src_cache)
+
+    # 3. 載入並聯集合併到全域的 GEO_COORD_CACHE
+    loaded_count = 0
+    for c_file in cache_files_found:
         try:
-            log_callback(msg)
-        except Exception:
-            pass
-
-    ext = Path(file_path).suffix.lower()
-    if ext not in STANDARD_EXTENSIONS:
-        reason = "SKIP: EXIF GPS not supported for this file type"
-        geo_log(reason, ext)
-        return "-", "-", "skip", reason
-
-    if not EXIFREAD_AVAILABLE:
-        reason = "FAIL: exifread unavailable"
-        geo_log(reason)
-        return "-", "-", "fail", reason
-
-    try:
-        with open(file_path, 'rb') as f:
-            tags = exifread.process_file(f, details=False)
-
-        if 'GPS GPSLatitude' not in tags or 'GPS GPSLongitude' not in tags:
-            reason = "FAIL: missing GPS EXIF (GPSLatitude/GPSLongitude)"
-            geo_log(reason)
-            return "-", "-", "fail", reason
-
-        def dms_to_dec(dms_tag, ref_tag):
-            values = dms_tag.values
-            d = float(values[0].num) / float(values[0].den)
-            m = float(values[1].num) / float(values[1].den)
-            s = float(values[2].num) / float(values[2].den)
-            dec = d + (m / 60.0) + (s / 3600.0)
-            if ref_tag in ['S', 'W']:
-                dec = -dec
-            return dec
-
-        lat_ref = str(tags.get('GPS GPSLatitudeRef', 'N'))
-        lon_ref = str(tags.get('GPS GPSLongitudeRef', 'E'))
-        lat = dms_to_dec(tags['GPS GPSLatitude'], lat_ref)
-        lon = dms_to_dec(tags['GPS GPSLongitude'], lon_ref)
-
-        map_url = f"https://www.google.com/maps?q={lat:.4f},{lon:.4f}"
-        loc_name = "-"
-
-        if not RG_AVAILABLE:
-            reason = "FAIL: reverse_geocoder unavailable"
-            geo_log(reason)
-            return loc_name, map_url, "fail", reason
-
-        coord_key = (round(lat, 3), round(lon, 3))
-        if coord_key in GEO_COORD_CACHE:
-            return GEO_COORD_CACHE[coord_key], map_url, "pass", None
-
-        try:
-            res = rg.search((lat, lon))
-            if res and len(res) > 0:
-                info = res[0]
-                c = info.get('cc', '')
-                a1 = info.get('admin1', '')
-                a2 = info.get('name', '')
-                parts = [p for p in [c, a1] if p]
-                loc_str = " - ".join(parts)
-                loc_name = f"{loc_str} ({a2})" if (loc_str and a2) else (loc_str or a2 or "-")
-                GEO_COORD_CACHE[coord_key] = loc_name
-                return loc_name, map_url, "pass", None
-
-            reason = "FAIL: rg.search returned no result"
-            geo_log(reason)
-            return loc_name, map_url, "fail", reason
+            with open(c_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                for key_str, loc_name in data.items():
+                    if ',' in key_str:
+                        lat_str, lon_str = key_str.split(',', 1)
+                        coord_key = (round(float(lat_str), 3), round(float(lon_str), 3))
+                        if coord_key not in GEO_COORD_CACHE:
+                            GEO_COORD_CACHE[coord_key] = loc_name
+                            loaded_count += 1
+            if log_callback:
+                log_callback(f"[GEO_CACHE] 成功繼承歷史地理快取: {c_file.name} (+{loaded_count} 筆空間座標)")
         except Exception as e:
-            reason = f"ERROR: rg.search exception | {repr(e)}"
-            geo_log("ERROR: rg.search exception", repr(e))
-            return loc_name, map_url, "fail", reason
+            if log_callback:
+                log_callback(f"[GEO_CACHE] 讀取快取失敗 ({c_file.name}): {e}")
+
+def save_geo_cache_to_dest(dest_dir, log_callback=None):
+    """處理完畢後，將全域地理快取封存至目標輸出根目錄"""
+    if not GEO_COORD_CACHE:
+        return
+    dest_cache = Path(dest_dir) / "_manifest_geo.json"
+    try:
+        # 將 Tuple key (lat, lon) 轉為 "lat,lon" 字串格式以符合標準 JSON 規範
+        export_data = {f"{lat},{lon}": name for (lat, lon), name in GEO_COORD_CACHE.items()}
+        with open(dest_cache, 'w', encoding='utf-8') as f:
+            json.dump(export_data, f, ensure_ascii=False, indent=2)
+        if log_callback:
+            log_callback(f"[GEO_CACHE] 空間位置字典已成功封存至: {dest_cache.name} (共 {len(export_data)} 筆)")
     except Exception as e:
-        reason = f"ERROR: EXIF parse exception | {repr(e)}"
-        geo_log("ERROR: EXIF parse exception", repr(e))
-        return "-", "-", "fail", reason
+        if log_callback:
+            log_callback(f"[GEO_CACHE] 封存快取失敗: {e}")
+
+def get_stats_banner_html():
+    """產生整合至 HTML 報告頂端的戰情統計看板 HTML"""
+    t_time = format_time(GEO_PERF_STATS.get('total_time', 0))
+    copied = GEO_PERF_STATS.get('copied', 0)
+    skipped = GEO_PERF_STATS.get('skipped', 0)
+    queries = GEO_PERF_STATS.get('queries', 0)
+    hits = GEO_PERF_STATS.get('cache_hits', 0)
+    new_l = GEO_PERF_STATS.get('new_lookups', 0)
+    hit_rate = (hits / queries * 100) if queries > 0 else 0.0
+
+    return f"""
+    <div style="background: #EAF2F8; border-left: 4px solid #2980B9; padding: 12px 18px; margin: 15px 0; border-radius: 6px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 20px; color: #2C3E50; box-shadow: 0 1px 3px rgba(0,0,0,0.05); line-height: 1.6;">
+        <span>⏱️ <b>總處理耗時:</b> {t_time}</span>
+        <span>📁 <b>實體複製與歸檔:</b> {copied:,} 張 <small style="color:#7F8C8D;">(物理去重略過 {skipped:,} 張)</small></span>
+        <span>🌏 <b>地理座標查詢:</b> 共 {queries:,} 次</span>
+        <span>⚡ <b>快取命中與重用:</b> {hits:,} 次 (<span style="color:#27AE60; font-weight:bold;">{hit_rate:.1f}% 繼承或重用</span>)</span>
+        <span>🔍 <b>新增空間反查:</b> {new_l:,} 次 <small style="color:#2980B9;">(極速批量 C++ KD-Tree)</small></span>
+    </div>
+    """
+# =================================================================
 
 def _geo_ratio_to_float(value):
     try:
@@ -750,35 +777,16 @@ def _geo_extract_with_pillow_heif(file_path):
     except Exception as e:
         return None, None, f"ERROR: pillow-heif parse exception | {repr(e)}"
 
-def get_exif_location(file_path, log_callback=None):
-    """Read coordinates and return (location text, Google Maps URL, status, fail reason)."""
-    display_path = format_display_path(file_path)
-
-    def geo_log(reason, detail=None):
-        if not log_callback:
-            return
-        msg = f"[GEO] {display_path} | {reason}"
-        if detail:
-            msg += f" | {detail}"
-        try:
-            log_callback(msg)
-        except Exception:
-            pass
-
+def extract_raw_coords(file_path):
+    """提取未經四捨五入的原始高精度浮點數經緯度 (lat, lon, error_reason)"""
     ext = Path(file_path).suffix.lower()
     if ext not in STANDARD_EXTENSIONS:
-        reason = "SKIP: EXIF GPS not supported for this file type"
-        geo_log(reason, ext)
-        return "-", "-", "skip", reason
+        return None, None, "SKIP: EXIF GPS not supported for this file type"
 
     lat, lon, reason = _geo_extract_with_exifread(file_path)
     if (lat is None or lon is None) and ext in {'.heic', '.heif'}:
-        if reason:
-            geo_log(f"{reason} | fallback: pillow-heif")
         lat, lon, reason_pillow = _geo_extract_with_pillow_heif(file_path)
         if lat is None or lon is None:
-            if reason_pillow:
-                geo_log(f"{reason_pillow} | fallback: exiftool")
             lat, lon, reason_exiftool = _geo_extract_with_exiftool(file_path)
             reason = reason_exiftool or reason_pillow or reason
         else:
@@ -786,39 +794,9 @@ def get_exif_location(file_path, log_callback=None):
 
     if lat is None or lon is None:
         reason = reason or "FAIL: missing GPS EXIF (GPSLatitude/GPSLongitude)"
-        geo_log(reason)
-        return "-", "-", "fail", reason
+        return None, None, reason
 
-    map_url = f"https://www.google.com/maps?q={lat:.4f},{lon:.4f}"
-    loc_name = "-"
-    if not RG_AVAILABLE:
-        reason = "FAIL: reverse_geocoder unavailable"
-        geo_log(reason)
-        return loc_name, map_url, "fail", reason
-
-    coord_key = (round(lat, 3), round(lon, 3))
-    if coord_key in GEO_COORD_CACHE:
-        return GEO_COORD_CACHE[coord_key], map_url, "pass", None
-
-    try:
-        res = rg.search((lat, lon))
-        if res and len(res) > 0:
-            info = res[0]
-            c = info.get('cc', '')
-            a1 = info.get('admin1', '')
-            a2 = info.get('name', '')
-            parts = [p for p in [c, a1] if p]
-            loc_str = " - ".join(parts)
-            loc_name = f"{loc_str} ({a2})" if (loc_str and a2) else (loc_str or a2 or "-")
-            GEO_COORD_CACHE[coord_key] = loc_name
-            return loc_name, map_url, "pass", None
-        reason = "FAIL: rg.search returned no result"
-        geo_log(reason)
-        return loc_name, map_url, "fail", reason
-    except Exception as e:
-        reason = f"ERROR: rg.search exception | {repr(e)}"
-        geo_log("ERROR: rg.search exception", repr(e))
-        return loc_name, map_url, "fail", reason
+    return lat, lon, None
 
 def get_exif_subsec(file_path):
     return get_capture_meta(file_path).get('subsec_raw')
@@ -925,6 +903,18 @@ def is_burst_shot(src_path, target_path):
     delta = abs(src_epoch - tgt_epoch)
     return 0 < delta < 1.0
 
+# 定義自己產出的檔案特徵，避免誤殺使用者原始檔
+def is_kairos_self_file(filename):
+    # 1. 報表檔案 (如 _index.html, 2026_04_media_report.html)
+    if filename.endswith('_media_report.html') or filename == '_index.html':
+        return True
+    # 2. 清單與日誌檔案 (如 _manifest_geo.json, _manifest_audit.csv, _manifest_skiplist.txt, _process_log.txt)
+    system_prefixes = ('_manifest_', '_process_log.txt', '_kairos_')
+
+    if filename.startswith(system_prefixes):
+        return True
+    return False
+
 def compare_and_decide(src_path, target_path):
     """Priority: IDENTICAL -> SAME_MS -> BURST -> REPLACE/KEEP by mtime."""
     if is_identical_file(src_path, target_path):
@@ -1015,9 +1005,8 @@ def second_pass_month(month_dir, stop_event):
 
         safe_rename_batch(rename_map)
 
-# 函式定義加上 start_time=0、processed_size=0 與 performance_mode=False
 def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, q=None, stop_event=None, start_time=0, processed_size=0, performance_mode=False):
-    """第二輪後由實際目的地重建 HTML 索引，若開啟地理解析則極速反查，並同步更新 UI 進度與計時狀態"""
+    """第二輪後由實際目的地重建 HTML 索引，若開啟地理解析則進行批量極速反查，並同步更新 UI 進度與計時狀態"""
     records_by_group = defaultdict(list)
     geo_log_callback = (lambda message: q.put(('log', message))) if (q and not performance_mode) else None
     geo_stats = {'pass': 0, 'fail': 0, 'skip': 0}
@@ -1035,15 +1024,16 @@ def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, 
                     all_files.append((root.name if organize_by_time else 'ALL_MEDIA', path))
 
     total_count = len(all_files)
+    file_geo_tasks = []
+    unique_keys_to_query = set()
 
     for idx, (month_key, path) in enumerate(all_files, start=1):
         if stop_event and stop_event.is_set():
             break
 
-        if q and idx % 15 == 0:  # 每處理 15 個檔案推播一次進度
-            q.put(('status', f"Building HTML report and geo cache index... ({idx} / {total_count})"))
+        if q and idx % 15 == 0:
+            q.put(('status', f"Building HTML report and extracting GPS data... ({idx} / {total_count})"))
             q.put(('progress', idx / max(total_count, 1)))
-            # 新增：持續推送計時器更新，讓 UI 時間累計順暢跳動
             if start_time > 0:
                 q.put(('metrics', (time.time() - start_time, processed_size)))
 
@@ -1053,22 +1043,71 @@ def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, 
 
         loc_name, map_url = "-", "-"
         needs_geo_lookup = category in ("standard", "candidate") and ext in GEO_LOOKUP_EXTENSIONS
-        if enable_geo_lookup and needs_geo_lookup:
-            loc_name, map_url, geo_status, geo_error = get_exif_location(path, log_callback=geo_log_callback)
-            if geo_status in geo_stats:
-                geo_stats[geo_status] += 1
-            if geo_status == "fail" and geo_error:
-                geo_fail_by_abs_path[os.path.normcase(os.path.abspath(str(path)))] = geo_error
-                geo_fail_reason_counter[geo_error] += 1
-            if geo_status == "pass" and map_url != "-":
-                geo_map_by_abs_path[os.path.normcase(os.path.abspath(str(path)))] = map_url
 
-        records_by_group[month_key].append({
+        rec_dict = {
             'name': path.name, 'rel_path': path.relative_to(dest_path).as_posix(),
             'size': path.stat().st_size, 'category': category,
             'group_key': base or path.stem, 'group_order': 1 if category == 'candidate' else 0,
             'loc_name': loc_name, 'map_url': map_url
-        })
+        }
+        records_by_group[month_key].append(rec_dict)
+
+        if enable_geo_lookup and needs_geo_lookup:
+            lat, lon, reason = extract_raw_coords(path)
+            if lat is None or lon is None:
+                geo_stats['fail'] += 1
+                abs_p = os.path.normcase(os.path.abspath(str(path)))
+                geo_fail_by_abs_path[abs_p] = reason or "FAIL: missing GPS EXIF"
+                geo_fail_reason_counter[reason or "FAIL: missing GPS EXIF"] += 1
+                if geo_log_callback:
+                    geo_log_callback(f"[GEO] {format_display_path(path)} | {reason}")
+            else:
+                geo_stats['pass'] += 1
+                # 雙流設計 1：導航網址保留小數點後 4 位高精度 (現場生成)
+                map_url = f"https://www.google.com/maps?q={lat:.4f},{lon:.4f}"
+                # 雙流設計 2：地名查詢 Key 降至小數點後 3 位 (百米快取)
+                coord_key = (round(lat, 3), round(lon, 3))
+
+                abs_p = os.path.normcase(os.path.abspath(str(path)))
+                geo_map_by_abs_path[abs_p] = map_url
+                rec_dict['map_url'] = map_url
+
+                GEO_PERF_STATS['queries'] += 1
+                if coord_key in GEO_COORD_CACHE:
+                    GEO_PERF_STATS['cache_hits'] += 1
+                    rec_dict['loc_name'] = GEO_COORD_CACHE[coord_key]
+                else:
+                    unique_keys_to_query.add(coord_key)
+                    file_geo_tasks.append((rec_dict, coord_key))
+        elif enable_geo_lookup and not needs_geo_lookup:
+            geo_stats['skip'] += 1
+
+    # 🚀 執行 C++ 批量矩陣查詢 (Batch Geocoding)
+    if unique_keys_to_query and RG_AVAILABLE:
+        query_list = list(unique_keys_to_query)
+        if q:
+            q.put(('status', f"🚀 正在調用 reverse_geocoder 批量解析 ({len(query_list)} 組全新空間座標)..."))
+        try:
+            res_list = rg.search(query_list)
+            for idx, coord_key in enumerate(query_list):
+                info = res_list[idx]
+                c = info.get('cc', '')
+                a1 = info.get('admin1', '')
+                a2 = info.get('name', '')
+                parts = [p for p in [c, a1] if p]
+                loc_str = " - ".join(parts)
+                loc_name = f"{loc_str} ({a2})" if (loc_str and a2) else (loc_str or a2 or "-")
+                GEO_COORD_CACHE[coord_key] = loc_name
+            GEO_PERF_STATS['new_lookups'] += len(query_list)
+            if geo_log_callback:
+                geo_log_callback(f"[GEO_BATCH] 成功批量反查並寫入 {len(query_list)} 筆全新空間地名字典！")
+        except Exception as e:
+            if geo_log_callback:
+                geo_log_callback(f"[GEO_ERROR] 批量反查例外失敗: {e}")
+
+    # 為未命中快取的檔案填入批量反查到的地名
+    for rec_dict, coord_key in file_geo_tasks:
+        rec_dict['loc_name'] = GEO_COORD_CACHE.get(coord_key, "-")
 
     if q:
         q.put(('progress', 1.0))
@@ -1531,8 +1570,6 @@ def generate_manifest_html(output_root_dir, audit_manifest):
     geo_filter_btn_html = '<button onclick="setFilter(\'status\', \'GEO\', this)">🌏 GEO</button>' if has_geo_column else ''
     geo_header_html = '<th>地圖</th>' if has_geo_column else ''
 
-    # 1. 為了減少體積與記憶體，將資料轉為純陣列結構，不再生成任何靜態 <tr> HTML
-    # 順序對應: 0:檔名, 1:來源, 2:輸出, 3:相機, 4:副檔名, 5:類別, 6:狀態, 7:理由, 8:插件, 9:地圖(可選)
     clean_data = []
     for row in audit_manifest:
         normalized = [
@@ -1603,6 +1640,7 @@ def generate_manifest_html(output_root_dir, audit_manifest):
             <span>📋 照片影片處理總報表 <span class="generated-time">(Generated : {generated_ts})</span></span>
             <span style="font-size: 14px; color: #7F8C8D; font-weight: normal;">總收錄: <strong id="totalCount" style="color:#2C3E50;">0</strong> 筆資料</span>
         </h1>
+        {get_stats_banner_html()}
         <div class="filter-bar">
             <button onclick="window.open('_manifest_filetype.html','fileTypeSummary','width=980,height=720')">檔案類型統計</button>
             <span>🔍 搜尋過濾:</span>
@@ -1799,12 +1837,8 @@ def generate_manifest_html(output_root_dir, audit_manifest):
                 let statusClass = "status-success";
                 if (status === "SKIP") statusClass = "status-skip";
                 else if (status === "FAIL") statusClass = "status-fail";
-                let geoCellHtml = (HAS_GEO_COL && geoMap !== "-")
-                    ? `<a href="${{escapeHtml(geoMap)}}" target="_blank" title="View on Google Maps">🌏️</a>`
-                    : "-";
 
-                // Normalize geo link rendering to avoid mojibake/broken tag issues.
-                geoCellHtml = (HAS_GEO_COL && geoMap !== "-")
+                let geoCellHtml = (HAS_GEO_COL && geoMap !== "-")
                     ? `<a href="${{escapeHtml(geoMap)}}" target="_blank" title="View on Google Maps">&#127757;</a>`
                     : "-";
 
@@ -1845,6 +1879,15 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     report_lines = []
     audit_manifest = []
     CAPTURE_META_CACHE.clear()
+
+    # 歸零全域戰情數據
+    GEO_PERF_STATS['queries'] = 0
+    GEO_PERF_STATS['cache_hits'] = 0
+    GEO_PERF_STATS['new_lookups'] = 0
+    GEO_PERF_STATS['copied'] = 0
+    GEO_PERF_STATS['skipped'] = 0
+    GEO_PERF_STATS['total_time'] = 0.0
+
     if performance_mode:
         q.put(('log', "[PERF] Performance mode enabled: less log / fast scan / GEO fail summary"))
 
@@ -1853,15 +1896,16 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         q.put(('reset', None))
         return
 
-    # 🎯 核心優化：地理解析顯式預先載入 (Explicit Lazy Loading)
-    # 解決在第一輪與第二輪之間「卡在 100% 默默載入地理庫」導致假死的 Bug
+    # 🚀 執行前：搜尋原本來源目錄 (及父目錄) 與目的目錄，聯集載入歷史 _manifest_geo.json
+    if enable_geo_lookup:
+        load_and_merge_geo_caches(selected_folders, dest_dir, log_callback=lambda m: q.put(('log', m)))
+
     if enable_geo_lookup and not RG_AVAILABLE:
         q.put(('log', "[GEO] FAIL: reverse_geocoder unavailable; only EXIF GPS and map URL will be used."))
 
     if enable_geo_lookup and RG_AVAILABLE:
         q.put(('status', "⏳ Loading global offline geo database (first load may take a few seconds)..."))
         try:
-            # 🎯 使用「桃園火車站」座標預熱，精準優化大桃園地區生活與出遊照片的 CPU L1/L2 空間快取
             _ = rg.search((24.989, 121.313))
             q.put(('log', "✅ Global offline geo database loaded and index warmed up."))
         except Exception as e:
@@ -1873,6 +1917,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     if copy_raw: valid_extensions.update(RAW_EXTENSIONS)
     if copy_video: valid_extensions.update(VIDEO_EXTENSIONS)
 
+    # 走訪所有被選目錄
     for folder in selected_folders:
         if stop_event.is_set(): break
         for dirpath, dirnames, filenames in os.walk(folder):
@@ -1891,15 +1936,20 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             display_path = format_display_path(dirpath)
             display_path = display_path if len(display_path) <= 65 else "..." + display_path[-62:]
             q.put(('status', f"🔍 Scanning directory: {display_path}"))
+
+            # 走訪所有檔案
             for filename in filenames:
+                # 精確過濾：只有符合 Kairos 系統特徵的檔案才執行「靜默忽略」
+                if is_kairos_self_file(filename):
+                    continue
+
                 ext = os.path.splitext(filename)[1].lower()
                 full_src_p = os.path.join(dirpath, filename)
-
                 full_src_win_p = format_display_path(full_src_p)
 
                 if ext in IGNORED_EXTENSIONS:
+                    # 如果您希望連一般被忽略的檔案都不刷屏，這裡的 append 也可以保留現狀或改為 debug 級別
                     report_lines.append(f"[SKIP_FILE] {full_src_win_p} | REASON: ignored extension ({ext})\n")
-                    # 順序: [名稱, 來源, 輸出, 相機, 副檔名, 類別, 狀態, 理由, 插件]
                     audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "ignored", "SKIP", f"ignored extension ({ext})", "-"])
                     continue
 
@@ -2002,13 +2052,24 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             is_duplicate_skip = False
             skip_reason = None
 
-            if target_file.exists():
+            # 取得正規化後的最終目標主檔名 (例如 "2017-10-15 17.38.59")
+            target_stem = target_file.stem
+            
+            # 在進行衝突命名與 unique_path 前，先全面檢查該群組所有序號後綴是否存在實體相同檔案
+            identical_match = find_identical_in_target(file_path, target_dir, target_stem, ext)
+
+            if identical_match:
+                is_duplicate_skip = True
+                skip_reason = f"[Target existed] {identical_match.name}"
+                target_file = identical_match
+
+            elif target_file.exists():
                 overwrite_photo_mode = overwrite and category == "standard" and ext in STANDARD_EXTENSIONS
-                decision = compare_and_decide(file_path, target_file) if overwrite_photo_mode else ("IDENTICAL" if is_identical_file(file_path, target_file) else "KEEP")
+                decision = compare_and_decide(file_path, target_file)
 
                 if decision == "IDENTICAL":
                     is_duplicate_skip = True
-                    skip_reason = f"IDENTICAL (full SHA-256 match): {target_file.name}"
+                    skip_reason = f"[Target existed] {target_file.name}"
 
                 elif overwrite_photo_mode and decision == "SAME_MS":
                     src_mtime = os.path.getmtime(file_path)
@@ -2129,7 +2190,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         q.put(('status', f"First Pass | safe collection and duplicate-skip: {i + 1} / {total_files} ({(i + 1) / total_files:.1%}) | elapsed {format_time(phase_elapsed)} | phase remaining {format_time(remaining)} | overall ETA {format_time(overall_remaining)} | {display_file_path}"))
         q.put(('metrics', processed_size_bytes))  # 直接丟總大小！
 
-    # Second Pass：僅在 overwrite 啟用時，進行同秒衝突與候選整理。
+    # Second Pass：同秒連拍衝突與候選整理
     if not stop_event.is_set() and organize_by_time and overwrite:
         month_dirs = [p for p in dest_path.iterdir() if p.is_dir() and re.fullmatch(r'\d{4}_\d{2}', p.name)]
         second_start = time.time()
@@ -2140,7 +2201,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             q.put(('status', f"Second Pass | organizing burst sets and alternates: {index} / {len(month_dirs)} ({index / max(len(month_dirs), 1):.1%}) | elapsed {format_time(elapsed)} | overall ETA {format_time(remaining)} | {month_dir.name}"))
             second_pass_month(month_dir, stop_event)
             q.put(('progress', index / max(len(month_dirs), 1)))
-            q.put(('metrics', processed_size_bytes))  # 直接丟總大小！
+            q.put(('metrics', processed_size_bytes))
 
     generated_html_reports = []
     index_report_path = None
@@ -2148,10 +2209,20 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     geo_fail_by_abs_path = {}
     geo_map_by_abs_path = {}
     if not stop_event.is_set():
-        # 第二輪重新收集檔案，同時傳遞地理開關以維持地標資訊，同步傳入佇列與中斷事件，同步傳入start_time 與 processed_size_bytes）：
+        # 進行最終產出路徑掃描與「批量空間矩陣解析」
         monthly_media_map, geo_stats, geo_fail_by_abs_path, geo_map_by_abs_path, geo_fail_reason_counter = collect_media_records(
             dest_path, organize_by_time, enable_geo_lookup, q, stop_event, start_time, processed_size_bytes, performance_mode
         )
+
+        # 處理完畢後：將更新後的地理空間快取字典封存回目標輸出目錄
+        if enable_geo_lookup:
+            save_geo_cache_to_dest(dest_dir, log_callback=lambda m: q.put(('log', m)))
+
+        # 在生成 HTML 報表前，統計最終完成的執行時間與處理張數
+        GEO_PERF_STATS['total_time'] = time.time() - start_time
+        GEO_PERF_STATS['copied'] = success_count
+        GEO_PERF_STATS['skipped'] = skipped_count
+
         q.put(('status', "Generating HTML preview reports from final file state..."))
         for m_key, records in monthly_media_map.items():
             generate_html_report(dest_path, m_key, records)
@@ -2189,7 +2260,6 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                 # 新增「相機型號」,「插件訊息」欄位；地理解析啟用時加上「地圖」
                 has_geo_column = any(len(row) > 9 for row in audit_manifest)
                 header = ['檔案名稱', '來源完整路徑', '輸出目標路徑', '相機型號', '副檔名', '處理類別', '最終狀態', '詳細說明/略過原因', '插件訊息']
-                has_geo_column = any(len(row) > 9 for row in audit_manifest)
                 if has_geo_column:
                     header.append('地圖')
                 writer.writerow(header)

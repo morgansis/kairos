@@ -980,6 +980,14 @@ def is_kairos_self_file(filename):
         return True
     return False
 
+# Stage 15 (non-behavioral extraction): bind self-file rule to config.rules module.
+try:
+    from .config.rules import is_kairos_self_file as _rule_is_kairos_self_file
+except ImportError:
+    from config.rules import is_kairos_self_file as _rule_is_kairos_self_file
+
+is_kairos_self_file = _rule_is_kairos_self_file
+
 def compare_and_decide(src_path, target_path):
     """Priority: IDENTICAL -> SAME_MS -> BURST -> REPLACE/KEEP by mtime."""
     if is_identical_file(src_path, target_path):

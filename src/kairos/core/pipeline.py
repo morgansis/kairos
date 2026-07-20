@@ -19,6 +19,7 @@ try:
         STANDARD_EXTENSIONS,
         VIDEO_EXTENSIONS,
     )
+    from ..config.rules import is_kairos_self_file as _rule_is_kairos_self_file
     from ..metadata.arbiter import (
         CAPTURE_META_CACHE,
         compare_and_decide,
@@ -55,6 +56,7 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         STANDARD_EXTENSIONS,
         VIDEO_EXTENSIONS,
     )
+    from config.rules import is_kairos_self_file as _rule_is_kairos_self_file
     from metadata.arbiter import (
         CAPTURE_META_CACHE,
         compare_and_decide,
@@ -93,6 +95,9 @@ def is_kairos_self_file(filename):
     if filename.startswith(system_prefixes):
         return True
     return False
+
+# Bind to centralized rule implementation.
+is_kairos_self_file = _rule_is_kairos_self_file
 
 def threaded_process_images(selected_folders, dest_dir, organize_by_time, normalize_name, enable_geo_lookup, copy_video, copy_raw, overwrite, performance_mode, q, stop_event):
     dest_path = Path(dest_dir)

@@ -18,7 +18,17 @@ def build_valid_extensions(copy_raw, copy_video, standard_extensions, raw_extens
     return valid_extensions
 
 
+def classify_scan_outcome(stop_event, files):
+    """Classify scan outcome for post-scan guards in pipeline."""
+    if stop_event.is_set():
+        return "interrupted"
+    if len(files) == 0:
+        return "empty"
+    return "ready"
+
+
 __all__ = [
     "requires_single_source_without_time_grouping",
     "build_valid_extensions",
+    "classify_scan_outcome",
 ]

@@ -16,7 +16,11 @@ try:
         build_skiplist_append_message,
         export_audit_bundle,
     )
-    from .preflight import build_valid_extensions, requires_single_source_without_time_grouping
+    from .preflight import (
+        build_valid_extensions,
+        classify_scan_outcome,
+        requires_single_source_without_time_grouping,
+    )
     from ..config.constants import (
         EXCLUDE_DIR_KEYWORDS,
         IGNORED_EXTENSIONS,
@@ -61,7 +65,11 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         build_skiplist_append_message,
         export_audit_bundle,
     )
-    from core.preflight import build_valid_extensions, requires_single_source_without_time_grouping
+    from core.preflight import (
+        build_valid_extensions,
+        classify_scan_outcome,
+        requires_single_source_without_time_grouping,
+    )
     from config.constants import (
         EXCLUDE_DIR_KEYWORDS,
         IGNORED_EXTENSIONS,
@@ -199,13 +207,14 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
                     report_lines.append(f"[SKIP] {full_src_win_p} | REASON: unsupported extension ({ext})\n")
                     audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "ignored", "SKIP", f"unsupported extension ({ext})", "-"])
 
-    if stop_event.is_set():
+    scan_outcome = classify_scan_outcome(stop_event, files)
+    if scan_outcome == "interrupted":
         q.put(('status', "🛑 Processing interrupted"))
         q.put(('reset', None))
         return
 
     total_files = len(files)
-    if total_files == 0:
+    if scan_outcome == "empty":
         q.put(('msgbox', ("提示", "所選目錄中找不到符合的媒體檔。"), 'info', None))
         q.put(('reset', None))
         return

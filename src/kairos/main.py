@@ -274,6 +274,12 @@ GEO_PERF_STATS = {
 }
 # =================================================================
 
+# Stage 2 (non-behavioral extraction): centralize constants in config module.
+try:
+    from .config.constants import *  # noqa: F401,F403
+except ImportError:
+    from config.constants import *  # noqa: F401,F403
+
 class PluginWarningCapturer:
     """專門用來攔截第三方外掛 (exifread, hachoir, PIL) 輸出警告與錯誤的攔截器"""
     def __init__(self):
@@ -534,6 +540,65 @@ def candidate_path_for(month_dir, stem, ext):
     candidate_dir = month_dir / 'candidate'
     candidate_dir.mkdir(parents=True, exist_ok=True)
     return unique_indexed_path(candidate_dir, stem, ext, start=1)
+
+
+# Stage 2 (non-behavioral extraction): bind runtime utility calls to extracted modules.
+try:
+    from .utils.file_ops import (
+        candidate_path_for as _candidate_path_for,
+        file_sha256 as _file_sha256,
+        find_identical_in_target as _find_identical_in_target,
+        is_identical_file as _is_identical_file,
+        timestamp_parts as _timestamp_parts,
+        unique_indexed_path as _unique_indexed_path,
+        unique_path as _unique_path,
+    )
+    from .utils.logger import PluginWarningCapturer as _PluginWarningCapturer
+    from .utils.sys_helpers import (
+        apply_window_icon as _apply_window_icon,
+        apply_windows_titlebar_theme as _apply_windows_titlebar_theme,
+        format_display_path as _format_display_path,
+        format_size as _format_size,
+        format_time as _format_time,
+        parse_saved_source_paths as _parse_saved_source_paths,
+        resource_path as _resource_path,
+    )
+except ImportError:
+    from utils.file_ops import (
+        candidate_path_for as _candidate_path_for,
+        file_sha256 as _file_sha256,
+        find_identical_in_target as _find_identical_in_target,
+        is_identical_file as _is_identical_file,
+        timestamp_parts as _timestamp_parts,
+        unique_indexed_path as _unique_indexed_path,
+        unique_path as _unique_path,
+    )
+    from utils.logger import PluginWarningCapturer as _PluginWarningCapturer
+    from utils.sys_helpers import (
+        apply_window_icon as _apply_window_icon,
+        apply_windows_titlebar_theme as _apply_windows_titlebar_theme,
+        format_display_path as _format_display_path,
+        format_size as _format_size,
+        format_time as _format_time,
+        parse_saved_source_paths as _parse_saved_source_paths,
+        resource_path as _resource_path,
+    )
+
+format_display_path = _format_display_path
+parse_saved_source_paths = _parse_saved_source_paths
+resource_path = _resource_path
+format_size = _format_size
+format_time = _format_time
+apply_windows_titlebar_theme = _apply_windows_titlebar_theme
+apply_window_icon = _apply_window_icon
+is_identical_file = _is_identical_file
+find_identical_in_target = _find_identical_in_target
+file_sha256 = _file_sha256
+timestamp_parts = _timestamp_parts
+unique_path = _unique_path
+unique_indexed_path = _unique_indexed_path
+candidate_path_for = _candidate_path_for
+PluginWarningCapturer = _PluginWarningCapturer
 
 def get_media_date(file_path):
     ext = Path(file_path).suffix.lower()

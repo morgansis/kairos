@@ -16,14 +16,13 @@ try:
         build_skiplist_append_message,
         export_audit_bundle,
     )
+    from .source_scan import collect_source_files
     from .preflight import (
         build_valid_extensions,
         classify_scan_outcome,
         requires_single_source_without_time_grouping,
     )
     from ..config.constants import (
-        EXCLUDE_DIR_KEYWORDS,
-        IGNORED_EXTENSIONS,
         PLACEHOLDER,
         RAW_EXTENSIONS,
         STANDARD_EXTENSIONS,
@@ -64,14 +63,13 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         build_skiplist_append_message,
         export_audit_bundle,
     )
+    from core.source_scan import collect_source_files
     from core.preflight import (
         build_valid_extensions,
         classify_scan_outcome,
         requires_single_source_without_time_grouping,
     )
     from config.constants import (
-        EXCLUDE_DIR_KEYWORDS,
-        IGNORED_EXTENSIONS,
         PLACEHOLDER,
         RAW_EXTENSIONS,
         STANDARD_EXTENSIONS,
@@ -144,7 +142,6 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
     enable_geo_lookup = prepare_geo_runtime(enable_geo_lookup, q)
 
-    files = []
     valid_extensions = build_valid_extensions(
         copy_raw=copy_raw,
         copy_video=copy_video,
@@ -152,48 +149,16 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         raw_extensions=RAW_EXTENSIONS,
         video_extensions=VIDEO_EXTENSIONS,
     )
-
-    # 走訪所有被選目錄
-    for folder in selected_folders:
-        if stop_event.is_set(): break
-        for dirpath, dirnames, filenames in os.walk(folder):
-            if stop_event.is_set(): break
-
-            # 關鍵修復：針對被 EXCLUDE_DIR_KEYWORDS 排除的目錄，強制攔截並輸出日誌理由
-            removed_dirs = [d for d in dirnames if any(keyword in d.lower() for keyword in EXCLUDE_DIR_KEYWORDS)]
-            for d in removed_dirs:
-                skip_path = format_display_path(os.path.join(dirpath, d))
-                skip_msg = f"[SKIP_DIR] {skip_path} | REASON: ignored directory ({d})"
-                report_lines.append(skip_msg + "\n")
-                if not performance_mode:
-                    q.put(('log', skip_msg))
-            dirnames[:] = [d for d in dirnames if d not in removed_dirs]
-
-            display_path = format_display_path(dirpath)
-            display_path = display_path if len(display_path) <= 65 else "..." + display_path[-62:]
-            q.put(('status', f"🔍 Scanning directory: {display_path}"))
-
-            # 走訪所有檔案
-            for filename in filenames:
-                # 精確過濾：只有符合 Kairos 系統特徵的檔案才執行「靜默忽略」
-                if is_kairos_self_file(filename):
-                    continue
-
-                ext = os.path.splitext(filename)[1].lower()
-                full_src_p = os.path.join(dirpath, filename)
-                full_src_win_p = format_display_path(full_src_p)
-
-                if ext in IGNORED_EXTENSIONS:
-                    # 如果您希望連一般被忽略的檔案都不刷屏，這裡的 append 也可以保留現狀或改為 debug 級別
-                    report_lines.append(f"[SKIP_FILE] {full_src_win_p} | REASON: ignored extension ({ext})\n")
-                    audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "ignored", "SKIP", f"ignored extension ({ext})", "-"])
-                    continue
-
-                if ext in valid_extensions:
-                    files.append(Path(dirpath) / filename)
-                else:
-                    report_lines.append(f"[SKIP] {full_src_win_p} | REASON: unsupported extension ({ext})\n")
-                    audit_manifest.append([filename, full_src_win_p, "-", "-", ext, "ignored", "SKIP", f"unsupported extension ({ext})", "-"])
+    files = collect_source_files(
+        selected_folders=selected_folders,
+        valid_extensions=valid_extensions,
+        report_lines=report_lines,
+        audit_manifest=audit_manifest,
+        q=q,
+        stop_event=stop_event,
+        performance_mode=performance_mode,
+        is_kairos_self_file=is_kairos_self_file,
+    )
 
     scan_outcome = classify_scan_outcome(stop_event, files)
     if scan_outcome == "interrupted":

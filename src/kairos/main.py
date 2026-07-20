@@ -1120,12 +1120,18 @@ try:
         get_media_date as _meta_get_media_date,
     )
     from .metadata.geo_engine import (
+        GEO_COORD_CACHE as _meta_geo_coord_cache,
+        GEO_PERF_STATS as _meta_geo_perf_stats,
         _geo_dms_to_decimal as _meta_geo_dms_to_decimal,
         _geo_extract_with_exifread as _meta_geo_extract_with_exifread,
         _geo_extract_with_exiftool as _meta_geo_extract_with_exiftool,
         _geo_extract_with_pillow_heif as _meta_geo_extract_with_pillow_heif,
         _geo_ratio_to_float as _meta_geo_ratio_to_float,
+        collect_media_records as _meta_collect_media_records,
         extract_raw_coords as _meta_extract_raw_coords,
+        get_stats_banner_html as _meta_get_stats_banner_html,
+        load_and_merge_geo_caches as _meta_load_and_merge_geo_caches,
+        save_geo_cache_to_dest as _meta_save_geo_cache_to_dest,
     )
 except ImportError:
     from metadata.exif_parser import (
@@ -1133,16 +1139,27 @@ except ImportError:
         get_media_date as _meta_get_media_date,
     )
     from metadata.geo_engine import (
+        GEO_COORD_CACHE as _meta_geo_coord_cache,
+        GEO_PERF_STATS as _meta_geo_perf_stats,
         _geo_dms_to_decimal as _meta_geo_dms_to_decimal,
         _geo_extract_with_exifread as _meta_geo_extract_with_exifread,
         _geo_extract_with_exiftool as _meta_geo_extract_with_exiftool,
         _geo_extract_with_pillow_heif as _meta_geo_extract_with_pillow_heif,
         _geo_ratio_to_float as _meta_geo_ratio_to_float,
+        collect_media_records as _meta_collect_media_records,
         extract_raw_coords as _meta_extract_raw_coords,
+        get_stats_banner_html as _meta_get_stats_banner_html,
+        load_and_merge_geo_caches as _meta_load_and_merge_geo_caches,
+        save_geo_cache_to_dest as _meta_save_geo_cache_to_dest,
     )
 
+GEO_COORD_CACHE = _meta_geo_coord_cache
+GEO_PERF_STATS = _meta_geo_perf_stats
 get_media_date = _meta_get_media_date
 get_camera_model = _meta_get_camera_model
+load_and_merge_geo_caches = _meta_load_and_merge_geo_caches
+save_geo_cache_to_dest = _meta_save_geo_cache_to_dest
+get_stats_banner_html = _meta_get_stats_banner_html
 _geo_ratio_to_float = _meta_geo_ratio_to_float
 _geo_dms_to_decimal = _meta_geo_dms_to_decimal
 _geo_extract_with_exifread = _meta_geo_extract_with_exifread
@@ -1260,6 +1277,9 @@ def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, 
             q.put(('metrics', (time.time() - start_time, processed_size)))
 
     return records_by_group, geo_stats, geo_fail_by_abs_path, geo_map_by_abs_path, geo_fail_reason_counter
+
+# Bind post-definition to ensure runtime uses extracted module implementation.
+collect_media_records = _meta_collect_media_records
 
 def destination_extension_counts(dest_path):
     excluded = {'_index.html', '_manifest_audit.csv', '_manifest_skiplist.txt', '_manifest_filetype.html'}

@@ -1070,6 +1070,49 @@ def second_pass_month(month_dir, stop_event):
 
         safe_rename_batch(rename_map)
 
+
+# Stage 3 (non-behavioral extraction): bind arbitration logic to metadata module.
+try:
+    from .metadata.arbiter import (
+        CAPTURE_META_CACHE as _ARB_CAPTURE_META_CACHE,
+        _read_exif_capture_fields as _arb_read_exif_capture_fields,
+        compare_and_decide as _arb_compare_and_decide,
+        get_capture_meta as _arb_get_capture_meta,
+        get_exif_subsec as _arb_get_exif_subsec,
+        invalidate_capture_meta as _arb_invalidate_capture_meta,
+        is_burst_shot as _arb_is_burst_shot,
+        is_same_millisecond_capture as _arb_is_same_millisecond_capture,
+        normalized_subsec as _arb_normalized_subsec,
+        safe_rename_batch as _arb_safe_rename_batch,
+        second_pass_month as _arb_second_pass_month,
+    )
+except ImportError:
+    from metadata.arbiter import (
+        CAPTURE_META_CACHE as _ARB_CAPTURE_META_CACHE,
+        _read_exif_capture_fields as _arb_read_exif_capture_fields,
+        compare_and_decide as _arb_compare_and_decide,
+        get_capture_meta as _arb_get_capture_meta,
+        get_exif_subsec as _arb_get_exif_subsec,
+        invalidate_capture_meta as _arb_invalidate_capture_meta,
+        is_burst_shot as _arb_is_burst_shot,
+        is_same_millisecond_capture as _arb_is_same_millisecond_capture,
+        normalized_subsec as _arb_normalized_subsec,
+        safe_rename_batch as _arb_safe_rename_batch,
+        second_pass_month as _arb_second_pass_month,
+    )
+
+CAPTURE_META_CACHE = _ARB_CAPTURE_META_CACHE
+normalized_subsec = _arb_normalized_subsec
+_read_exif_capture_fields = _arb_read_exif_capture_fields
+get_capture_meta = _arb_get_capture_meta
+invalidate_capture_meta = _arb_invalidate_capture_meta
+get_exif_subsec = _arb_get_exif_subsec
+is_same_millisecond_capture = _arb_is_same_millisecond_capture
+is_burst_shot = _arb_is_burst_shot
+compare_and_decide = _arb_compare_and_decide
+safe_rename_batch = _arb_safe_rename_batch
+second_pass_month = _arb_second_pass_month
+
 def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, q=None, stop_event=None, start_time=0, processed_size=0, performance_mode=False):
     """第二輪後由實際目的地重建 HTML 索引，若開啟地理解析則進行批量極速反查，並同步更新 UI 進度與計時狀態"""
     records_by_group = defaultdict(list)

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import html
 import re
+import html
 import urllib.parse
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
 
 try:
     from ..utils.sys_helpers import format_display_path, format_size

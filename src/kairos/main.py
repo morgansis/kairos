@@ -1,6 +1,6 @@
 """
 ================================================================================
-媒體檔案自動化整理與劇院級檢視工具 (Media Organizer Pro) - v2026-07-18
+媒體檔案自動化整理與劇院級檢視工具 (Media Organizer Pro) - v2026-07-20
 ================================================================================
 Designed for creators, this tool provides safe, lossless media archiving
 with millisecond burst protection, intelligent deduplication, and a full-screen
@@ -170,7 +170,7 @@ THEMES = {
 # 預設啟動色系
 DEFAULT_THEME_NAME = "晨霧灰藍 (沈穩)"
 # ===================== 程式設定 =====================
-VERSION = "2026-07-18"
+VERSION = "2026-07-20"
 
 # ===================== UI tuning constants =====================
 UI_FONT_FAMILY = "Calibri"
@@ -2191,7 +2191,9 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             stem = file_path.stem
 
             # 讀取相機型號同時攔截插件訊息
-            if not performance_mode:
+            if performance_mode:
+                camera_model = get_camera_model(file_path)
+            else:
                 with PluginWarningCapturer() as capturer:
                     camera_model = get_camera_model(file_path)
                 captured_warnings.extend(capturer.get_messages())
@@ -2254,7 +2256,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
             if identical_match:
                 is_duplicate_skip = True
-                skip_reason = f"[Target existed] {identical_match.name}"
+                skip_reason = f"[IDENTICAL] {identical_match.name}"
                 target_file = identical_match
 
             elif target_file.exists():
@@ -2263,7 +2265,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
                 if decision == "IDENTICAL":
                     is_duplicate_skip = True
-                    skip_reason = f"[Target existed] {target_file.name}"
+                    skip_reason = f"[IDENTICAL] {target_file.name}"
 
                 elif overwrite_photo_mode and decision == "SAME_MS":
                     src_mtime = os.path.getmtime(file_path)

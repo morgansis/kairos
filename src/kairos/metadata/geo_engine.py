@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import os
+import json
+import time
 import shutil
 import subprocess
-import time
-from collections import Counter, defaultdict
 from pathlib import Path
+from collections import Counter, defaultdict
 
 try:
     import exifread

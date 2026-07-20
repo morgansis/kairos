@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import ctypes
 import os
 import sys
+import ctypes
 from pathlib import Path
 
 

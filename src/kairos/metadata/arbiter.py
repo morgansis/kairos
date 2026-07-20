@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 import time
-from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
+from collections import defaultdict
 
 try:
     import exifread

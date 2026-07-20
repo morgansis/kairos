@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
+import subprocess
 import webbrowser
+import tkinter as tk
+import customtkinter as ctk
 from pathlib import Path
 from tkinter import messagebox
 
-import customtkinter as ctk
 
 try:
     from ..config.constants import *  # noqa: F401,F403

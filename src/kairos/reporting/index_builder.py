@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import html
-from collections import Counter
-from datetime import datetime
 from pathlib import Path
+from datetime import datetime
+from collections import Counter
 
 try:
     from ..config.constants import PLACEHOLDER

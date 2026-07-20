@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
+import hashlib
 from pathlib import Path
 
 try:

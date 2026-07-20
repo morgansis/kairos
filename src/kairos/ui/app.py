@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import configparser
 import os
-import queue
-import subprocess
 import sys
-import threading
 import time
+import queue
+import shutil
+import threading
+import subprocess
+import configparser
+import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -17,6 +19,9 @@ import customtkinter as ctk
 try:
     from ..config.constants import *  # noqa: F401,F403
     from ..core.pipeline import threaded_process_images
+    from ..metadata.exif_parser import EXIFREAD_AVAILABLE, PIL_AVAILABLE
+    from ..metadata.geo_engine import RG_AVAILABLE
+    from ..metadata.video_parser import HACHOIR_AVAILABLE
     from ..ui.dialogs import FolderSelectDialog, ModernMessageBox
     from ..utils.sys_helpers import (
         apply_window_icon,
@@ -29,6 +34,9 @@ try:
 except ImportError:  # pragma: no cover - direct script execution fallback
     from config.constants import *  # noqa: F401,F403
     from core.pipeline import threaded_process_images
+    from metadata.exif_parser import EXIFREAD_AVAILABLE, PIL_AVAILABLE
+    from metadata.geo_engine import RG_AVAILABLE
+    from metadata.video_parser import HACHOIR_AVAILABLE
     from ui.dialogs import FolderSelectDialog, ModernMessageBox
     from utils.sys_helpers import (
         apply_window_icon,
@@ -38,6 +46,15 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         format_time,
         parse_saved_source_paths,
     )
+
+try:
+    import pillow_heif  # noqa: F401
+
+    PILLOW_HEIF_AVAILABLE = True
+except ImportError:
+    PILLOW_HEIF_AVAILABLE = False
+
+EXIFTOOL_AVAILABLE = shutil.which("exiftool") is not None
 
 def open_folder(path_var, selected_paths=None):
     # 1. 取得目前的所有路徑清單

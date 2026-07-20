@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-import shutil
 import time
-from datetime import datetime
+import shutil
 from pathlib import Path
+from datetime import datetime
 
 try:
     from ..config.constants import PLACEHOLDER, RAW_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
@@ -77,7 +77,10 @@ def run_first_pass(
             ext = file_path.suffix.lower()
             stem = file_path.stem
 
-            if not performance_mode:
+            # 讀取相機型號同時攔截插件訊息
+            if performance_mode:
+                camera_model = get_camera_model(file_path)
+            else:
                 with PluginWarningCapturer() as capturer:
                     camera_model = get_camera_model(file_path)
                 captured_warnings.extend(capturer.get_messages())
@@ -134,7 +137,7 @@ def run_first_pass(
 
             if identical_match:
                 is_duplicate_skip = True
-                skip_reason = f"[Target existed] {identical_match.name}"
+                skip_reason = f"[IDENTICAL] {identical_match.name}"
                 target_file = identical_match
             elif target_file.exists():
                 overwrite_photo_mode = overwrite and category == "standard" and ext in STANDARD_EXTENSIONS
@@ -142,7 +145,7 @@ def run_first_pass(
 
                 if decision == "IDENTICAL":
                     is_duplicate_skip = True
-                    skip_reason = f"[Target existed] {target_file.name}"
+                    skip_reason = f"[IDENTICAL] {target_file.name}"
                 elif overwrite_photo_mode and decision == "SAME_MS":
                     src_mtime = os.path.getmtime(file_path)
                     tgt_mtime = os.path.getmtime(target_file)

@@ -97,15 +97,22 @@ def open_folder(path_var, selected_paths=None):
 
 def sigint_handler(sig, frame):
     print("\n[系統] 接收到 Ctrl+C 中斷指令，正在安全停止背景執行緒並離開程式...")
+    main_mod = sys.modules.get("__main__")
+    app_obj = getattr(main_mod, "app", None) if main_mod else None
+    root_obj = getattr(main_mod, "root", None) if main_mod else None
+    if app_obj is None:
+        app_obj = globals().get("app")
+    if root_obj is None:
+        root_obj = globals().get("root")
     try:
-        if 'app' in globals() and app.processing:
-            app.stop_event.set()
+        if app_obj is not None and getattr(app_obj, "processing", False):
+            app_obj.stop_event.set()
     except Exception:
         pass
     try:
-        if 'root' in globals():
-            root.quit()
-            root.destroy()
+        if root_obj is not None:
+            root_obj.quit()
+            root_obj.destroy()
     except Exception:
         pass
     sys.exit(0)

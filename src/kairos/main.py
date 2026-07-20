@@ -3263,6 +3263,14 @@ def sigint_handler(sig, frame):
         pass
     sys.exit(0)
 
+# Stage 16 (non-behavioral extraction): bind SIGINT handler to ui module.
+try:
+    from .ui.app import sigint_handler as _ui_sigint_handler
+except ImportError:
+    from ui.app import sigint_handler as _ui_sigint_handler
+
+sigint_handler = _ui_sigint_handler
+
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, sigint_handler)
 

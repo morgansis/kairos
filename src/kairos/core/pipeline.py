@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import csv
 import os
-import re
 import shutil
 import time
 from datetime import datetime
@@ -17,6 +16,7 @@ try:
         export_audit_bundle,
     )
     from .source_scan import collect_source_files
+    from .second_pass import run_second_pass
     from .preflight import (
         build_valid_extensions,
         classify_scan_outcome,
@@ -34,7 +34,6 @@ try:
         compare_and_decide,
         get_capture_meta,
         invalidate_capture_meta,
-        second_pass_month,
     )
     from ..metadata.exif_parser import get_camera_model, get_media_date
     from ..metadata.geo_engine import (
@@ -64,6 +63,7 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         export_audit_bundle,
     )
     from core.source_scan import collect_source_files
+    from core.second_pass import run_second_pass
     from core.preflight import (
         build_valid_extensions,
         classify_scan_outcome,
@@ -81,7 +81,6 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         compare_and_decide,
         get_capture_meta,
         invalidate_capture_meta,
-        second_pass_month,
     )
     from metadata.exif_parser import get_camera_model, get_media_date
     from metadata.geo_engine import (
@@ -392,18 +391,14 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         q.put(('status', f"First Pass | safe collection and duplicate-skip: {i + 1} / {total_files} ({(i + 1) / total_files:.1%}) | elapsed {format_time(phase_elapsed)} | phase remaining {format_time(remaining)} | overall ETA {format_time(overall_remaining)} | {display_file_path}"))
         q.put(('metrics', processed_size_bytes))  # 直接丟總大小！
 
-    # Second Pass：同秒連拍衝突與候選整理
-    if not stop_event.is_set() and organize_by_time and overwrite:
-        month_dirs = [p for p in dest_path.iterdir() if p.is_dir() and re.fullmatch(r'\d{4}_\d{2}', p.name)]
-        second_start = time.time()
-        for index, month_dir in enumerate(month_dirs, start=1):
-            elapsed = time.time() - second_start
-            rate = (index - 1) / elapsed if elapsed > 0 and index > 1 else 0
-            remaining = (len(month_dirs) - index + 1) / rate if rate else 0
-            q.put(('status', f"Second Pass | organizing burst sets and alternates: {index} / {len(month_dirs)} ({index / max(len(month_dirs), 1):.1%}) | elapsed {format_time(elapsed)} | overall ETA {format_time(remaining)} | {month_dir.name}"))
-            second_pass_month(month_dir, stop_event)
-            q.put(('progress', index / max(len(month_dirs), 1)))
-            q.put(('metrics', processed_size_bytes))
+    run_second_pass(
+        dest_path=dest_path,
+        organize_by_time=organize_by_time,
+        overwrite=overwrite,
+        stop_event=stop_event,
+        q=q,
+        processed_size_bytes=processed_size_bytes,
+    )
 
     generated_html_reports = []
     index_report_path = None

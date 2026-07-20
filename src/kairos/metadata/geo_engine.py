@@ -32,10 +32,14 @@ try:
     from ..config.constants import GEO_LOOKUP_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
     from ..utils.file_ops import timestamp_parts
     from ..utils.sys_helpers import format_display_path, format_time
+    from .geo_perf import finalize_geo_perf_stats as _finalize_geo_perf_stats
+    from .geo_perf import reset_geo_perf_stats as _reset_geo_perf_stats
 except ImportError:  # pragma: no cover - direct script execution fallback
     from config.constants import GEO_LOOKUP_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
     from utils.file_ops import timestamp_parts
     from utils.sys_helpers import format_display_path, format_time
+    from metadata.geo_perf import finalize_geo_perf_stats as _finalize_geo_perf_stats
+    from metadata.geo_perf import reset_geo_perf_stats as _reset_geo_perf_stats
 
 GEO_COORD_CACHE = {}
 GEO_PERF_STATS = {
@@ -51,20 +55,13 @@ GEO_PERF_STATS = {
 def reset_geo_perf_stats(stats=None):
     """Reset geo performance counters to startup defaults."""
     target = GEO_PERF_STATS if stats is None else stats
-    target['queries'] = 0
-    target['cache_hits'] = 0
-    target['new_lookups'] = 0
-    target['copied'] = 0
-    target['skipped'] = 0
-    target['total_time'] = 0.0
+    _reset_geo_perf_stats(target)
 
 
 def finalize_geo_perf_stats(start_time, copied, skipped, stats=None):
     """Persist end-of-run geo performance values."""
     target = GEO_PERF_STATS if stats is None else stats
-    target['total_time'] = time.time() - start_time
-    target['copied'] = copied
-    target['skipped'] = skipped
+    _finalize_geo_perf_stats(start_time, copied, skipped, target)
 
 
 def load_and_merge_geo_caches(source_folders, dest_dir, log_callback=None):

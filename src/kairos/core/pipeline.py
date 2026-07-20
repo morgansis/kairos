@@ -14,8 +14,7 @@ try:
     from ..database.auditor import emit_completion_dialog
     from ..database.manifest_db import (
         build_skiplist_append_message,
-        export_index_reports,
-        merge_geo_audit_columns,
+        export_audit_bundle,
     )
     from ..config.constants import (
         EXCLUDE_DIR_KEYWORDS,
@@ -58,8 +57,7 @@ except ImportError:  # pragma: no cover - direct script execution fallback
     from database.auditor import emit_completion_dialog
     from database.manifest_db import (
         build_skiplist_append_message,
-        export_index_reports,
-        merge_geo_audit_columns,
+        export_audit_bundle,
     )
     from config.constants import (
         EXCLUDE_DIR_KEYWORDS,
@@ -462,22 +460,17 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             generate_html_report(dest_path, m_key, records)
             generated_html_reports.append((m_key, dest_path / f"{m_key}_media_report.html"))
 
-    if audit_manifest:
-        try:
-            merge_geo_audit_columns(
-                audit_manifest,
-                enable_geo_lookup,
-                performance_mode,
-                q,
-                geo_stats,
-                geo_fail_reason_counter,
-                geo_fail_by_abs_path,
-                geo_map_by_abs_path,
-            )
-            index_report_path = export_index_reports(dest_path, audit_manifest, q)
-
-        except Exception as e:
-            q.put(('error_log', f"ERROR: failed to export CSV audit report: {e}"))
+    index_report_path = export_audit_bundle(
+        dest_path=dest_path,
+        audit_manifest=audit_manifest,
+        enable_geo_lookup=enable_geo_lookup,
+        performance_mode=performance_mode,
+        q=q,
+        geo_stats=geo_stats,
+        geo_fail_reason_counter=geo_fail_reason_counter,
+        geo_fail_by_abs_path=geo_fail_by_abs_path,
+        geo_map_by_abs_path=geo_map_by_abs_path,
+    )
 
     report_msg_append = build_skiplist_append_message(dest_path, report_lines, skipped_count, failed_count)
 

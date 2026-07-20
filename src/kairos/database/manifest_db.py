@@ -105,6 +105,37 @@ def export_index_reports(dest_path, audit_manifest, q):
     return index_report_path
 
 
+def export_audit_bundle(
+    dest_path,
+    audit_manifest,
+    enable_geo_lookup,
+    performance_mode,
+    q,
+    geo_stats,
+    geo_fail_reason_counter,
+    geo_fail_by_abs_path,
+    geo_map_by_abs_path,
+):
+    """Merge GEO columns and export reports; return index path or None."""
+    if not audit_manifest:
+        return None
+    try:
+        merge_geo_audit_columns(
+            audit_manifest,
+            enable_geo_lookup,
+            performance_mode,
+            q,
+            geo_stats,
+            geo_fail_reason_counter,
+            geo_fail_by_abs_path,
+            geo_map_by_abs_path,
+        )
+        return export_index_reports(dest_path, audit_manifest, q)
+    except Exception as e:
+        q.put(("error_log", f"ERROR: failed to export CSV audit report: {e}"))
+        return None
+
+
 def write_skiplist_report(dest_path, report_lines, skipped_count, failed_count):
     """Write `_manifest_skiplist.txt` and return the user-facing suffix message."""
     report_file_path = Path(dest_path) / "_manifest_skiplist.txt"
@@ -130,6 +161,7 @@ __all__ = [
     "merge_geo_audit_columns",
     "write_manifest_audit_csv",
     "export_index_reports",
+    "export_audit_bundle",
     "write_skiplist_report",
     "build_skiplist_append_message",
 ]

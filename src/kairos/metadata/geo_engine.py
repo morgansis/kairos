@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import time
+from collections import Counter, defaultdict
 from pathlib import Path
 
 try:
@@ -22,10 +25,21 @@ except ImportError:
     PIL_AVAILABLE = False
 
 try:
-    from ..config.constants import STANDARD_EXTENSIONS
+    import reverse_geocoder as rg
+
+    RG_AVAILABLE = True
+except ImportError:
+    RG_AVAILABLE = False
+
+try:
+    from ..config.constants import GEO_LOOKUP_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
+    from ..utils.file_ops import timestamp_parts
+    from ..utils.sys_helpers import format_display_path
     from ..utils.sys_helpers import format_time
 except ImportError:  # pragma: no cover - direct script execution fallback
-    from config.constants import STANDARD_EXTENSIONS
+    from config.constants import GEO_LOOKUP_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
+    from utils.file_ops import timestamp_parts
+    from utils.sys_helpers import format_display_path
     from utils.sys_helpers import format_time
 
 
@@ -243,6 +257,127 @@ def extract_raw_coords(file_path):
     return lat, lon, None
 
 
+def collect_media_records(
+    dest_path,
+    organize_by_time,
+    enable_geo_lookup=False,
+    q=None,
+    stop_event=None,
+    start_time=0,
+    processed_size=0,
+    performance_mode=False,
+):
+    """Rebuild report records and optional geo metadata from destination tree."""
+    records_by_group = defaultdict(list)
+    geo_log_callback = (lambda message: q.put(("log", message))) if (q and not performance_mode) else None
+    geo_stats = {"pass": 0, "fail": 0, "skip": 0}
+    geo_fail_by_abs_path = {}
+    geo_map_by_abs_path = {}
+    geo_fail_reason_counter = Counter()
+    roots = [p for p in dest_path.iterdir() if p.is_dir()] if organize_by_time else [dest_path]
+
+    all_files = []
+    for root in roots:
+        for path in root.rglob("*"):
+            if path.is_file() and not path.name.startswith("_"):
+                ext = path.suffix.lower()
+                if ext in STANDARD_EXTENSIONS or ext in VIDEO_EXTENSIONS:
+                    all_files.append((root.name if organize_by_time else "ALL_MEDIA", path))
+
+    total_count = len(all_files)
+    file_geo_tasks = []
+    unique_keys_to_query = set()
+
+    for idx, (month_key, path) in enumerate(all_files, start=1):
+        if stop_event and stop_event.is_set():
+            break
+
+        if q and idx % 15 == 0:
+            q.put(("status", f"Building HTML report and extracting GPS data... ({idx} / {total_count})"))
+            q.put(("progress", idx / max(total_count, 1)))
+            if start_time > 0:
+                q.put(("metrics", (time.time() - start_time, processed_size)))
+
+        ext = path.suffix.lower()
+        base, _ = timestamp_parts(path.stem)
+        category = "candidate" if "candidate" in path.parts else ("video" if ext in VIDEO_EXTENSIONS else "standard")
+
+        loc_name, map_url = "-", "-"
+        needs_geo_lookup = category in ("standard", "candidate") and ext in GEO_LOOKUP_EXTENSIONS
+
+        rec_dict = {
+            "name": path.name,
+            "rel_path": path.relative_to(dest_path).as_posix(),
+            "size": path.stat().st_size,
+            "category": category,
+            "group_key": base or path.stem,
+            "group_order": 1 if category == "candidate" else 0,
+            "loc_name": loc_name,
+            "map_url": map_url,
+        }
+        records_by_group[month_key].append(rec_dict)
+
+        if enable_geo_lookup and needs_geo_lookup:
+            lat, lon, reason = extract_raw_coords(path)
+            if lat is None or lon is None:
+                geo_stats["fail"] += 1
+                abs_p = os.path.normcase(os.path.abspath(str(path)))
+                geo_fail_by_abs_path[abs_p] = reason or "FAIL: missing GPS EXIF"
+                geo_fail_reason_counter[reason or "FAIL: missing GPS EXIF"] += 1
+                if geo_log_callback:
+                    geo_log_callback(f"[GEO] {format_display_path(path)} | {reason}")
+            else:
+                geo_stats["pass"] += 1
+                map_url = f"https://www.google.com/maps?q={lat:.4f},{lon:.4f}"
+                coord_key = (round(lat, 3), round(lon, 3))
+
+                abs_p = os.path.normcase(os.path.abspath(str(path)))
+                geo_map_by_abs_path[abs_p] = map_url
+                rec_dict["map_url"] = map_url
+
+                GEO_PERF_STATS["queries"] += 1
+                if coord_key in GEO_COORD_CACHE:
+                    GEO_PERF_STATS["cache_hits"] += 1
+                    rec_dict["loc_name"] = GEO_COORD_CACHE[coord_key]
+                else:
+                    unique_keys_to_query.add(coord_key)
+                    file_geo_tasks.append((rec_dict, coord_key))
+        elif enable_geo_lookup and not needs_geo_lookup:
+            geo_stats["skip"] += 1
+
+    if unique_keys_to_query and RG_AVAILABLE:
+        query_list = list(unique_keys_to_query)
+        if q:
+            q.put(("status", f"Running reverse_geocoder batch lookup... ({len(query_list)} coords)"))
+        try:
+            res_list = rg.search(query_list)
+            for idx, coord_key in enumerate(query_list):
+                info = res_list[idx]
+                c = info.get("cc", "")
+                a1 = info.get("admin1", "")
+                a2 = info.get("name", "")
+                parts = [p for p in [c, a1] if p]
+                loc_str = " - ".join(parts)
+                loc_name = f"{loc_str} ({a2})" if (loc_str and a2) else (loc_str or a2 or "-")
+                GEO_COORD_CACHE[coord_key] = loc_name
+            GEO_PERF_STATS["new_lookups"] += len(query_list)
+            if geo_log_callback:
+                geo_log_callback(f"[GEO_BATCH] Batch reverse lookup completed: {len(query_list)} keys")
+        except Exception as e:
+            if geo_log_callback:
+                geo_log_callback(f"[GEO_ERROR] Batch reverse lookup failed: {e}")
+
+    for rec_dict, coord_key in file_geo_tasks:
+        rec_dict["loc_name"] = GEO_COORD_CACHE.get(coord_key, "-")
+
+    if q:
+        q.put(("progress", 1.0))
+        if start_time > 0:
+            q.put(("metrics", (time.time() - start_time, processed_size)))
+
+    return records_by_group, geo_stats, geo_fail_by_abs_path, geo_map_by_abs_path, geo_fail_reason_counter
+
+
 __all__ = [
     "EXIFREAD_AVAILABLE",
     "PIL_AVAILABLE",
@@ -257,4 +392,5 @@ __all__ = [
     "_geo_extract_with_exiftool",
     "_geo_extract_with_pillow_heif",
     "extract_raw_coords",
+    "collect_media_records",
 ]

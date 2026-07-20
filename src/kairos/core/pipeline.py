@@ -13,6 +13,7 @@ try:
     from .source_scan import collect_source_files
     from .first_pass import run_first_pass
     from .second_pass import run_second_pass
+    from .final_phase import build_final_phase_outputs
     from .preflight import (
         build_valid_extensions,
         classify_scan_outcome,
@@ -26,15 +27,11 @@ try:
     from ..config.rules import is_kairos_self_file as _rule_is_kairos_self_file
     from ..metadata.arbiter import CAPTURE_META_CACHE
     from ..metadata.geo_engine import (
-        finalize_geo_perf_stats,
         GEO_PERF_STATS,
-        collect_media_records,
         load_and_merge_geo_caches,
         prepare_geo_runtime,
         reset_geo_perf_stats,
-        save_geo_cache_to_dest,
     )
-    from ..reporting.html_builder import generate_html_report
 except ImportError:  # pragma: no cover - direct script execution fallback
     from database.auditor import emit_completion_dialog
     from database.manifest_db import (
@@ -44,6 +41,7 @@ except ImportError:  # pragma: no cover - direct script execution fallback
     from core.source_scan import collect_source_files
     from core.first_pass import run_first_pass
     from core.second_pass import run_second_pass
+    from core.final_phase import build_final_phase_outputs
     from core.preflight import (
         build_valid_extensions,
         classify_scan_outcome,
@@ -57,26 +55,11 @@ except ImportError:  # pragma: no cover - direct script execution fallback
     from config.rules import is_kairos_self_file as _rule_is_kairos_self_file
     from metadata.arbiter import CAPTURE_META_CACHE
     from metadata.geo_engine import (
-        finalize_geo_perf_stats,
         GEO_PERF_STATS,
-        collect_media_records,
         load_and_merge_geo_caches,
         prepare_geo_runtime,
         reset_geo_perf_stats,
-        save_geo_cache_to_dest,
     )
-    from reporting.html_builder import generate_html_report
-
-def is_kairos_self_file(filename):
-    # 1. 報表檔案 (如 _index.html, 2026_04_media_report.html)
-    if filename.endswith('_media_report.html') or filename == '_index.html':
-        return True
-    # 2. 清單與日誌檔案 (如 _manifest_geo.json, _manifest_audit.csv, _manifest_skiplist.txt, _process_log.txt)
-    system_prefixes = ('_manifest_', '_process_log.txt', '_kairos_')
-
-    if filename.startswith(system_prefixes):
-        return True
-    return False
 
 # Bind to centralized rule implementation.
 is_kairos_self_file = _rule_is_kairos_self_file
@@ -164,29 +147,25 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         processed_size_bytes=processed_size_bytes,
     )
 
-    generated_html_reports = []
-    index_report_path = None
-    geo_stats = {'pass': 0, 'fail': 0, 'skip': 0}
-    geo_fail_by_abs_path = {}
-    geo_map_by_abs_path = {}
-    if not stop_event.is_set():
-        # 進行最終產出路徑掃描與「批量空間矩陣解析」
-        monthly_media_map, geo_stats, geo_fail_by_abs_path, geo_map_by_abs_path, geo_fail_reason_counter = collect_media_records(
-            dest_path, organize_by_time, enable_geo_lookup, q, stop_event, start_time, processed_size_bytes, performance_mode
-        )
-
-        # 處理完畢後：將更新後的地理空間快取字典封存回目標輸出目錄
-        if enable_geo_lookup:
-            save_geo_cache_to_dest(dest_dir, log_callback=lambda m: q.put(('log', m)))
-
-        # 在生成 HTML 報表前，統計最終完成的執行時間與處理張數
-        finalize_geo_perf_stats(start_time=start_time, copied=success_count, skipped=skipped_count, stats=GEO_PERF_STATS)
-
-        q.put(('status', "Generating HTML preview reports from final file state..."))
-        for m_key, records in monthly_media_map.items():
-            generate_html_report(dest_path, m_key, records)
-            generated_html_reports.append((m_key, dest_path / f"{m_key}_media_report.html"))
-
+    (
+        generated_html_reports,
+        geo_stats,
+        geo_fail_by_abs_path,
+        geo_map_by_abs_path,
+        geo_fail_reason_counter,
+    ) = build_final_phase_outputs(
+        dest_path=dest_path,
+        dest_dir=dest_dir,
+        organize_by_time=organize_by_time,
+        enable_geo_lookup=enable_geo_lookup,
+        q=q,
+        stop_event=stop_event,
+        start_time=start_time,
+        processed_size_bytes=processed_size_bytes,
+        performance_mode=performance_mode,
+        success_count=success_count,
+        skipped_count=skipped_count,
+    )
     index_report_path = export_audit_bundle(
         dest_path=dest_path,
         audit_manifest=audit_manifest,

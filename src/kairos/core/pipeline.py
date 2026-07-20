@@ -11,6 +11,11 @@ from datetime import datetime
 from pathlib import Path
 
 try:
+    from ..database.manifest_db import (
+        export_index_reports,
+        merge_geo_audit_columns,
+        write_skiplist_report,
+    )
     from ..config.constants import (
         EXCLUDE_DIR_KEYWORDS,
         IGNORED_EXTENSIONS,
@@ -48,6 +53,11 @@ try:
     from ..utils.logger import PluginWarningCapturer
     from ..utils.sys_helpers import format_display_path, format_time
 except ImportError:  # pragma: no cover - direct script execution fallback
+    from database.manifest_db import (
+        export_index_reports,
+        merge_geo_audit_columns,
+        write_skiplist_report,
+    )
     from config.constants import (
         EXCLUDE_DIR_KEYWORDS,
         IGNORED_EXTENSIONS,
@@ -455,55 +465,17 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
     if audit_manifest:
         try:
-            if enable_geo_lookup:
-                q.put(('log', f"🧭 GEO stats | PASS: {geo_stats.get('pass', 0)} | FAIL: {geo_stats.get('fail', 0)} | SKIP: {geo_stats.get('skip', 0)}"))
-                if performance_mode and geo_fail_reason_counter:
-                    summary_parts = [f"{reason} x{count}" for reason, count in geo_fail_reason_counter.most_common(5)]
-                    q.put(('log', f"[GEO] FAIL summary: {' | '.join(summary_parts)}"))
-                for row in audit_manifest:
-                    if len(row) < 10:
-                        row.append(PLACEHOLDER)
-                    target_path = row[2]
-                    if target_path == PLACEHOLDER:
-                        continue
-                    geo_key = os.path.normcase(os.path.abspath(str(target_path)))
-                    geo_reason = geo_fail_by_abs_path.get(geo_key)
-                    if not geo_reason:
-                        geo_url = geo_map_by_abs_path.get(geo_key)
-                        if geo_url:
-                            row[9] = geo_url
-                        continue
-                    geo_msg = f"[GEO] {geo_reason}"
-                    row[8] = geo_msg if row[8] == PLACEHOLDER else f"{row[8]} ; {geo_msg}"
-                    geo_url = geo_map_by_abs_path.get(geo_key)
-                    if geo_url:
-                        row[9] = geo_url
-
-            manifest_path = dest_path / "_manifest_audit.csv"
-            with open(manifest_path, "w", newline="", encoding="utf-8-sig") as f:
-                writer = csv.writer(f)
-                # 新增「相機型號」,「插件訊息」欄位；地理解析啟用時加上「地圖」
-                has_geo_column = any(len(row) > 9 for row in audit_manifest)
-                header = ['檔案名稱', '來源完整路徑', '輸出目標路徑', '相機型號', '副檔名', '處理類別', '最終狀態', '詳細說明/略過原因', '插件訊息']
-                if has_geo_column:
-                    header.append('地圖')
-                writer.writerow(header)
-                writer.writerows([
-                    [
-                        row[0],
-                        format_display_path(row[1]) if row[1] != PLACEHOLDER else PLACEHOLDER,
-                        format_display_path(row[2]) if row[2] != PLACEHOLDER else PLACEHOLDER,
-                        *(row[3:] if has_geo_column else row[3:9])
-                    ]
-                    for row in audit_manifest
-                ])
-            q.put(('log', f"📋 CSV report exported: {manifest_path.name}"))
-
-            generate_file_type_summary(dest_path, audit_manifest)
-            # 同步產出 HTML 總報表
-            generate_manifest_html(dest_path, audit_manifest)
-            index_report_path = dest_path / "_index.html"
-            q.put(('log', f"🌐 HTML report exported: _index.html"))
+            merge_geo_audit_columns(
+                audit_manifest,
+                enable_geo_lookup,
+                performance_mode,
+                q,
+                geo_stats,
+                geo_fail_reason_counter,
+                geo_fail_by_abs_path,
+                geo_map_by_abs_path,
+            )
+            index_report_path = export_index_reports(dest_path, audit_manifest, q)
 
         except Exception as e:
             q.put(('error_log', f"ERROR: failed to export CSV audit report: {e}"))
@@ -511,14 +483,9 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     report_msg_append = ""
     if report_lines:
         try:
-            report_file_path = dest_path / "_manifest_skiplist.txt"
-            with open(report_file_path, "w", encoding="utf-8") as f:
-                f.write(f"=== 媒體處理例外報告 (產生時間: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ===\n")
-                f.write(f"TOTAL SKIP: {skipped_count} | TOTAL FAIL: {failed_count}\n")
-                f.write("="*80 + "\n")
-                f.writelines(report_lines)
-            report_msg_append = f"\n\n📄 報表已輸出至output根目錄:\n_manifest_skiplist.txt\n_manifest_audit.csv\n_index.html"
-        except Exception: pass
+            report_msg_append = write_skiplist_report(dest_path, report_lines, skipped_count, failed_count)
+        except Exception:
+            pass
 
     if stop_event.is_set():
         msg = f"中斷前已處理數量統計\n\n✅ PASS: {success_count}\n⏭️ SKIP: {skipped_count}\n❌ FAIL: {failed_count}{report_msg_append}"

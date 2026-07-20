@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 try:
+    from ..database.auditor import emit_completion_dialog
     from ..database.manifest_db import (
         export_index_reports,
         merge_geo_audit_columns,
@@ -53,6 +54,7 @@ try:
     from ..utils.logger import PluginWarningCapturer
     from ..utils.sys_helpers import format_display_path, format_time
 except ImportError:  # pragma: no cover - direct script execution fallback
+    from database.auditor import emit_completion_dialog
     from database.manifest_db import (
         export_index_reports,
         merge_geo_audit_columns,
@@ -487,12 +489,16 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         except Exception:
             pass
 
-    if stop_event.is_set():
-        msg = f"中斷前已處理數量統計\n\n✅ PASS: {success_count}\n⏭️ SKIP: {skipped_count}\n❌ FAIL: {failed_count}{report_msg_append}"
-        q.put(('msgbox', ("中斷", msg), 'warning', None, index_report_path))
-    else:
-        msg = f"本次處理檔案數量統計\n\n✅ PASS: {success_count}\n⏭️ SKIP: {skipped_count}\n❌ FAIL: {failed_count}{report_msg_append}"
-        q.put(('msgbox', ("完成", msg), 'info', generated_html_reports, index_report_path))
+    emit_completion_dialog(
+        q=q,
+        interrupted=stop_event.is_set(),
+        success_count=success_count,
+        skipped_count=skipped_count,
+        failed_count=failed_count,
+        report_msg_append=report_msg_append,
+        generated_html_reports=generated_html_reports,
+        index_report_path=index_report_path,
+    )
 
     q.put(('reset', None))
 

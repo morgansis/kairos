@@ -47,6 +47,18 @@ GEO_PERF_STATS = {
     'total_time': 0.0
 }
 
+
+def reset_geo_perf_stats(stats=None):
+    """Reset geo performance counters to startup defaults."""
+    target = GEO_PERF_STATS if stats is None else stats
+    target['queries'] = 0
+    target['cache_hits'] = 0
+    target['new_lookups'] = 0
+    target['copied'] = 0
+    target['skipped'] = 0
+    target['total_time'] = 0.0
+
+
 def load_and_merge_geo_caches(source_folders, dest_dir, log_callback=None):
     """從所有來源與目的目錄 (及其上一層母目錄) 中尋找並繼承舊的地理快取"""
     cache_files_found = set()
@@ -357,6 +369,7 @@ __all__ = [
     "RG_AVAILABLE",
     "GEO_COORD_CACHE",
     "GEO_PERF_STATS",
+    "reset_geo_perf_stats",
     "load_and_merge_geo_caches",
     "save_geo_cache_to_dest",
     "get_stats_banner_html",

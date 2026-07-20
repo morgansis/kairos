@@ -39,6 +39,7 @@ try:
         RG_AVAILABLE,
         collect_media_records,
         load_and_merge_geo_caches,
+        reset_geo_perf_stats,
         rg,
         save_geo_cache_to_dest,
     )
@@ -82,6 +83,7 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         RG_AVAILABLE,
         collect_media_records,
         load_and_merge_geo_caches,
+        reset_geo_perf_stats,
         rg,
         save_geo_cache_to_dest,
     )
@@ -118,12 +120,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     CAPTURE_META_CACHE.clear()
 
     # 歸零全域戰情數據
-    GEO_PERF_STATS['queries'] = 0
-    GEO_PERF_STATS['cache_hits'] = 0
-    GEO_PERF_STATS['new_lookups'] = 0
-    GEO_PERF_STATS['copied'] = 0
-    GEO_PERF_STATS['skipped'] = 0
-    GEO_PERF_STATS['total_time'] = 0.0
+    reset_geo_perf_stats(GEO_PERF_STATS)
 
     if performance_mode:
         q.put(('log', "[PERF] Performance mode enabled: less log / fast scan / GEO fail summary"))

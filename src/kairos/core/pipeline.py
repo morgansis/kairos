@@ -41,11 +41,10 @@ try:
     from ..metadata.geo_engine import (
         finalize_geo_perf_stats,
         GEO_PERF_STATS,
-        RG_AVAILABLE,
         collect_media_records,
         load_and_merge_geo_caches,
+        prepare_geo_runtime,
         reset_geo_perf_stats,
-        rg,
         save_geo_cache_to_dest,
     )
     from ..reporting.html_builder import generate_html_report
@@ -90,11 +89,10 @@ except ImportError:  # pragma: no cover - direct script execution fallback
     from metadata.geo_engine import (
         finalize_geo_perf_stats,
         GEO_PERF_STATS,
-        RG_AVAILABLE,
         collect_media_records,
         load_and_merge_geo_caches,
+        prepare_geo_runtime,
         reset_geo_perf_stats,
-        rg,
         save_geo_cache_to_dest,
     )
     from reporting.html_builder import generate_html_report
@@ -144,17 +142,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     if enable_geo_lookup:
         load_and_merge_geo_caches(selected_folders, dest_dir, log_callback=lambda m: q.put(('log', m)))
 
-    if enable_geo_lookup and not RG_AVAILABLE:
-        q.put(('log', "[GEO] FAIL: reverse_geocoder unavailable; only EXIF GPS and map URL will be used."))
-
-    if enable_geo_lookup and RG_AVAILABLE:
-        q.put(('status', "⏳ Loading global offline geo database (first load may take a few seconds)..."))
-        try:
-            _ = rg.search((24.989, 121.313))
-            q.put(('log', "✅ Global offline geo database loaded and index warmed up."))
-        except Exception as e:
-            q.put(('log', f"⚠️ [GEO] ERROR: database preload failed: {e}"))
-            enable_geo_lookup = False
+    enable_geo_lookup = prepare_geo_runtime(enable_geo_lookup, q)
 
     files = []
     valid_extensions = build_valid_extensions(

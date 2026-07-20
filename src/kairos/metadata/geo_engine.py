@@ -64,6 +64,23 @@ def finalize_geo_perf_stats(start_time, copied, skipped, stats=None):
     _finalize_geo_perf_stats(start_time, copied, skipped, target)
 
 
+def prepare_geo_runtime(enable_geo_lookup, q):
+    """Warm up reverse-geocoder and gracefully downgrade on preload failure."""
+    if enable_geo_lookup and not RG_AVAILABLE:
+        q.put(("log", "[GEO] FAIL: reverse_geocoder unavailable; only EXIF GPS and map URL will be used."))
+
+    if enable_geo_lookup and RG_AVAILABLE:
+        q.put(("status", "⏳ Loading global offline geo database (first load may take a few seconds)..."))
+        try:
+            _ = rg.search((24.989, 121.313))
+            q.put(("log", "✅ Global offline geo database loaded and index warmed up."))
+        except Exception as e:
+            q.put(("log", f"⚠️ [GEO] ERROR: database preload failed: {e}"))
+            return False
+
+    return enable_geo_lookup
+
+
 def load_and_merge_geo_caches(source_folders, dest_dir, log_callback=None):
     """從所有來源與目的目錄 (及其上一層母目錄) 中尋找並繼承舊的地理快取"""
     cache_files_found = set()
@@ -376,6 +393,7 @@ __all__ = [
     "GEO_PERF_STATS",
     "reset_geo_perf_stats",
     "finalize_geo_perf_stats",
+    "prepare_geo_runtime",
     "load_and_merge_geo_caches",
     "save_geo_cache_to_dest",
     "get_stats_banner_html",

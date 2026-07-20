@@ -59,6 +59,14 @@ def reset_geo_perf_stats(stats=None):
     target['total_time'] = 0.0
 
 
+def finalize_geo_perf_stats(start_time, copied, skipped, stats=None):
+    """Persist end-of-run geo performance values."""
+    target = GEO_PERF_STATS if stats is None else stats
+    target['total_time'] = time.time() - start_time
+    target['copied'] = copied
+    target['skipped'] = skipped
+
+
 def load_and_merge_geo_caches(source_folders, dest_dir, log_callback=None):
     """從所有來源與目的目錄 (及其上一層母目錄) 中尋找並繼承舊的地理快取"""
     cache_files_found = set()
@@ -370,6 +378,7 @@ __all__ = [
     "GEO_COORD_CACHE",
     "GEO_PERF_STATS",
     "reset_geo_perf_stats",
+    "finalize_geo_perf_stats",
     "load_and_merge_geo_caches",
     "save_geo_cache_to_dest",
     "get_stats_banner_html",

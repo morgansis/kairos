@@ -34,6 +34,7 @@ try:
     )
     from ..metadata.exif_parser import get_camera_model, get_media_date
     from ..metadata.geo_engine import (
+        finalize_geo_perf_stats,
         GEO_PERF_STATS,
         RG_AVAILABLE,
         collect_media_records,
@@ -77,6 +78,7 @@ except ImportError:  # pragma: no cover - direct script execution fallback
     )
     from metadata.exif_parser import get_camera_model, get_media_date
     from metadata.geo_engine import (
+        finalize_geo_perf_stats,
         GEO_PERF_STATS,
         RG_AVAILABLE,
         collect_media_records,
@@ -451,9 +453,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             save_geo_cache_to_dest(dest_dir, log_callback=lambda m: q.put(('log', m)))
 
         # 在生成 HTML 報表前，統計最終完成的執行時間與處理張數
-        GEO_PERF_STATS['total_time'] = time.time() - start_time
-        GEO_PERF_STATS['copied'] = success_count
-        GEO_PERF_STATS['skipped'] = skipped_count
+        finalize_geo_perf_stats(start_time=start_time, copied=success_count, skipped=skipped_count, stats=GEO_PERF_STATS)
 
         q.put(('status', "Generating HTML preview reports from final file state..."))
         for m_key, records in monthly_media_map.items():

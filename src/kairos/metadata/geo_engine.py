@@ -23,8 +23,94 @@ except ImportError:
 
 try:
     from ..config.constants import STANDARD_EXTENSIONS
+    from ..utils.sys_helpers import format_time
 except ImportError:  # pragma: no cover - direct script execution fallback
     from config.constants import STANDARD_EXTENSIONS
+    from utils.sys_helpers import format_time
+
+
+GEO_COORD_CACHE = {}
+GEO_PERF_STATS = {
+    "queries": 0,
+    "cache_hits": 0,
+    "new_lookups": 0,
+    "copied": 0,
+    "skipped": 0,
+    "total_time": 0.0,
+}
+
+
+def load_and_merge_geo_caches(source_folders, dest_dir, log_callback=None):
+    """Load and merge geo caches from destination and source parent paths."""
+    cache_files_found = set()
+
+    dest_cache = Path(dest_dir) / "_manifest_geo.json"
+    if dest_cache.exists():
+        cache_files_found.add(dest_cache)
+
+    for src in source_folders:
+        src_path = Path(src)
+        for check_dir in [src_path, src_path.parent]:
+            src_cache = check_dir / "_manifest_geo.json"
+            if src_cache.exists():
+                cache_files_found.add(src_cache)
+
+    loaded_count = 0
+    for cache_file in cache_files_found:
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for key_str, loc_name in data.items():
+                    if "," in key_str:
+                        lat_str, lon_str = key_str.split(",", 1)
+                        coord_key = (round(float(lat_str), 3), round(float(lon_str), 3))
+                        if coord_key not in GEO_COORD_CACHE:
+                            GEO_COORD_CACHE[coord_key] = loc_name
+                            loaded_count += 1
+            if log_callback:
+                log_callback(
+                    f"[GEO_CACHE] Loaded cache file: {cache_file.name} (+{loaded_count} merged keys)"
+                )
+        except Exception as e:
+            if log_callback:
+                log_callback(f"[GEO_CACHE] Failed to load ({cache_file.name}): {e}")
+
+
+def save_geo_cache_to_dest(dest_dir, log_callback=None):
+    """Persist merged GEO cache into destination root."""
+    if not GEO_COORD_CACHE:
+        return
+    dest_cache = Path(dest_dir) / "_manifest_geo.json"
+    try:
+        export_data = {f"{lat},{lon}": name for (lat, lon), name in GEO_COORD_CACHE.items()}
+        with open(dest_cache, "w", encoding="utf-8") as f:
+            json.dump(export_data, f, ensure_ascii=False, indent=2)
+        if log_callback:
+            log_callback(f"[GEO_CACHE] Saved merged cache: {dest_cache.name} ({len(export_data)} keys)")
+    except Exception as e:
+        if log_callback:
+            log_callback(f"[GEO_CACHE] Save failed: {e}")
+
+
+def get_stats_banner_html():
+    """Render runtime GEO statistics banner for manifest report."""
+    t_time = format_time(GEO_PERF_STATS.get("total_time", 0))
+    copied = GEO_PERF_STATS.get("copied", 0)
+    skipped = GEO_PERF_STATS.get("skipped", 0)
+    queries = GEO_PERF_STATS.get("queries", 0)
+    hits = GEO_PERF_STATS.get("cache_hits", 0)
+    new_l = GEO_PERF_STATS.get("new_lookups", 0)
+    hit_rate = (hits / queries * 100) if queries > 0 else 0.0
+
+    return f"""
+    <div style="background: #EAF2F8; border-left: 4px solid #2980B9; padding: 12px 18px; margin: 15px 0; border-radius: 6px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 20px; color: #2C3E50; box-shadow: 0 1px 3px rgba(0,0,0,0.05); line-height: 1.6;">
+        <span><b>Total Time:</b> {t_time}</span>
+        <span><b>Copied / Skipped:</b> {copied:,} / {skipped:,}</span>
+        <span><b>Geo Queries:</b> {queries:,}</span>
+        <span><b>Cache Hit:</b> {hits:,} (<span style="color:#27AE60; font-weight:bold;">{hit_rate:.1f}%</span>)</span>
+        <span><b>Batch Lookups:</b> {new_l:,}</span>
+    </div>
+    """
 
 
 def _geo_ratio_to_float(value):
@@ -160,6 +246,11 @@ def extract_raw_coords(file_path):
 __all__ = [
     "EXIFREAD_AVAILABLE",
     "PIL_AVAILABLE",
+    "GEO_COORD_CACHE",
+    "GEO_PERF_STATS",
+    "load_and_merge_geo_caches",
+    "save_geo_cache_to_dest",
+    "get_stats_banner_html",
     "_geo_ratio_to_float",
     "_geo_dms_to_decimal",
     "_geo_extract_with_exifread",

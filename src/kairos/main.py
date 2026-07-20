@@ -2018,6 +2018,27 @@ def generate_manifest_html(output_root_dir, audit_manifest):
     except Exception:
         pass
 
+# Stage 7 (non-behavioral extraction): bind reporting builders to reporting modules.
+try:
+    from .reporting.html_builder import generate_html_report as _report_generate_html_report
+    from .reporting.index_builder import (
+        destination_extension_counts as _report_destination_extension_counts,
+        generate_file_type_summary as _report_generate_file_type_summary,
+        generate_manifest_html as _report_generate_manifest_html,
+    )
+except ImportError:
+    from reporting.html_builder import generate_html_report as _report_generate_html_report
+    from reporting.index_builder import (
+        destination_extension_counts as _report_destination_extension_counts,
+        generate_file_type_summary as _report_generate_file_type_summary,
+        generate_manifest_html as _report_generate_manifest_html,
+    )
+
+destination_extension_counts = _report_destination_extension_counts
+generate_html_report = _report_generate_html_report
+generate_file_type_summary = _report_generate_file_type_summary
+generate_manifest_html = _report_generate_manifest_html
+
 # --- 背景執行緒函式 ---
 def threaded_process_images(selected_folders, dest_dir, organize_by_time, normalize_name, enable_geo_lookup, copy_video, copy_raw, overwrite, performance_mode, q, stop_event):
     dest_path = Path(dest_dir)

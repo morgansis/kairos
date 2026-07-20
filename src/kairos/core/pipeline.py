@@ -16,6 +16,7 @@ try:
         build_skiplist_append_message,
         export_audit_bundle,
     )
+    from .preflight import build_valid_extensions, requires_single_source_without_time_grouping
     from ..config.constants import (
         EXCLUDE_DIR_KEYWORDS,
         IGNORED_EXTENSIONS,
@@ -60,6 +61,7 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         build_skiplist_append_message,
         export_audit_bundle,
     )
+    from core.preflight import build_valid_extensions, requires_single_source_without_time_grouping
     from config.constants import (
         EXCLUDE_DIR_KEYWORDS,
         IGNORED_EXTENSIONS,
@@ -125,7 +127,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     if performance_mode:
         q.put(('log', "[PERF] Performance mode enabled: less log / fast scan / GEO fail summary"))
 
-    if not organize_by_time and len(selected_folders) != 1:
+    if requires_single_source_without_time_grouping(organize_by_time, selected_folders):
         q.put(('msgbox', ("設定錯誤", "未啟用依年月整理時，來源與目的資料夾為 1:1，無法處理多個來源資料夾。"), 'warning', None))
         q.put(('reset', None))
         return
@@ -147,9 +149,13 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
             enable_geo_lookup = False
 
     files = []
-    valid_extensions = set(STANDARD_EXTENSIONS)
-    if copy_raw: valid_extensions.update(RAW_EXTENSIONS)
-    if copy_video: valid_extensions.update(VIDEO_EXTENSIONS)
+    valid_extensions = build_valid_extensions(
+        copy_raw=copy_raw,
+        copy_video=copy_video,
+        standard_extensions=STANDARD_EXTENSIONS,
+        raw_extensions=RAW_EXTENSIONS,
+        video_extensions=VIDEO_EXTENSIONS,
+    )
 
     # 走訪所有被選目錄
     for folder in selected_folders:

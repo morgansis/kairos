@@ -116,9 +116,20 @@ def write_skiplist_report(dest_path, report_lines, skipped_count, failed_count):
     return "\n\n📄 報表已輸出至output根目錄:\n_manifest_skiplist.txt\n_manifest_audit.csv\n_index.html"
 
 
+def build_skiplist_append_message(dest_path, report_lines, skipped_count, failed_count):
+    """Return report suffix message while keeping pipeline flow resilient."""
+    if not report_lines:
+        return ""
+    try:
+        return write_skiplist_report(dest_path, report_lines, skipped_count, failed_count)
+    except Exception:
+        return ""
+
+
 __all__ = [
     "merge_geo_audit_columns",
     "write_manifest_audit_csv",
     "export_index_reports",
     "write_skiplist_report",
+    "build_skiplist_append_message",
 ]

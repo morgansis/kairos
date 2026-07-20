@@ -13,9 +13,9 @@ from pathlib import Path
 try:
     from ..database.auditor import emit_completion_dialog
     from ..database.manifest_db import (
+        build_skiplist_append_message,
         export_index_reports,
         merge_geo_audit_columns,
-        write_skiplist_report,
     )
     from ..config.constants import (
         EXCLUDE_DIR_KEYWORDS,
@@ -57,9 +57,9 @@ try:
 except ImportError:  # pragma: no cover - direct script execution fallback
     from database.auditor import emit_completion_dialog
     from database.manifest_db import (
+        build_skiplist_append_message,
         export_index_reports,
         merge_geo_audit_columns,
-        write_skiplist_report,
     )
     from config.constants import (
         EXCLUDE_DIR_KEYWORDS,
@@ -479,12 +479,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         except Exception as e:
             q.put(('error_log', f"ERROR: failed to export CSV audit report: {e}"))
 
-    report_msg_append = ""
-    if report_lines:
-        try:
-            report_msg_append = write_skiplist_report(dest_path, report_lines, skipped_count, failed_count)
-        except Exception:
-            pass
+    report_msg_append = build_skiplist_append_message(dest_path, report_lines, skipped_count, failed_count)
 
     emit_completion_dialog(
         q=q,

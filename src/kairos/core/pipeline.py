@@ -2,11 +2,97 @@
 
 from __future__ import annotations
 
+import csv
 import os
+import re
+import shutil
 import time
-from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
+
+try:
+    from ..config.constants import (
+        EXCLUDE_DIR_KEYWORDS,
+        IGNORED_EXTENSIONS,
+        PLACEHOLDER,
+        RAW_EXTENSIONS,
+        STANDARD_EXTENSIONS,
+        VIDEO_EXTENSIONS,
+    )
+    from ..metadata.arbiter import (
+        CAPTURE_META_CACHE,
+        compare_and_decide,
+        get_capture_meta,
+        invalidate_capture_meta,
+        second_pass_month,
+    )
+    from ..metadata.exif_parser import get_camera_model, get_media_date
+    from ..metadata.geo_engine import (
+        GEO_PERF_STATS,
+        RG_AVAILABLE,
+        collect_media_records,
+        load_and_merge_geo_caches,
+        rg,
+        save_geo_cache_to_dest,
+    )
+    from ..reporting.html_builder import generate_html_report
+    from ..reporting.index_builder import generate_file_type_summary, generate_manifest_html
+    from ..utils.file_ops import (
+        candidate_path_for,
+        find_identical_in_target,
+        timestamp_parts,
+        unique_indexed_path,
+        unique_path,
+    )
+    from ..utils.logger import PluginWarningCapturer
+    from ..utils.sys_helpers import format_display_path, format_time
+except ImportError:  # pragma: no cover - direct script execution fallback
+    from config.constants import (
+        EXCLUDE_DIR_KEYWORDS,
+        IGNORED_EXTENSIONS,
+        PLACEHOLDER,
+        RAW_EXTENSIONS,
+        STANDARD_EXTENSIONS,
+        VIDEO_EXTENSIONS,
+    )
+    from metadata.arbiter import (
+        CAPTURE_META_CACHE,
+        compare_and_decide,
+        get_capture_meta,
+        invalidate_capture_meta,
+        second_pass_month,
+    )
+    from metadata.exif_parser import get_camera_model, get_media_date
+    from metadata.geo_engine import (
+        GEO_PERF_STATS,
+        RG_AVAILABLE,
+        collect_media_records,
+        load_and_merge_geo_caches,
+        rg,
+        save_geo_cache_to_dest,
+    )
+    from reporting.html_builder import generate_html_report
+    from reporting.index_builder import generate_file_type_summary, generate_manifest_html
+    from utils.file_ops import (
+        candidate_path_for,
+        find_identical_in_target,
+        timestamp_parts,
+        unique_indexed_path,
+        unique_path,
+    )
+    from utils.logger import PluginWarningCapturer
+    from utils.sys_helpers import format_display_path, format_time
+
+def is_kairos_self_file(filename):
+    # 1. 報表檔案 (如 _index.html, 2026_04_media_report.html)
+    if filename.endswith('_media_report.html') or filename == '_index.html':
+        return True
+    # 2. 清單與日誌檔案 (如 _manifest_geo.json, _manifest_audit.csv, _manifest_skiplist.txt, _process_log.txt)
+    system_prefixes = ('_manifest_', '_process_log.txt', '_kairos_')
+
+    if filename.startswith(system_prefixes):
+        return True
+    return False
 
 def threaded_process_images(selected_folders, dest_dir, organize_by_time, normalize_name, enable_geo_lookup, copy_video, copy_raw, overwrite, performance_mode, q, stop_event):
     dest_path = Path(dest_dir)
@@ -438,4 +524,4 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
     q.put(('reset', None))
 
-__all__ = ["threaded_process_images"]
+__all__ = ["is_kairos_self_file", "threaded_process_images"]

@@ -2491,6 +2491,14 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
     q.put(('reset', None))
 
 # --- 智慧瀏覽資料夾 ---
+# Stage 12 (non-behavioral extraction): bind threaded pipeline to core module.
+try:
+    from .core.pipeline import threaded_process_images as _core_threaded_process_images
+except ImportError:
+    from core.pipeline import threaded_process_images as _core_threaded_process_images
+
+threaded_process_images = _core_threaded_process_images
+
 def open_folder(path_var, selected_paths=None):
     # 1. 取得目前的所有路徑清單
     paths = []
@@ -2548,6 +2556,14 @@ def open_folder(path_var, selected_paths=None):
         messagebox.showwarning("警告", f"⚠️ 資料夾不存在: {target_path}")
 
 # --- 精巧統計對話框 ---
+# Stage 11 (non-behavioral extraction): bind folder opener helper to ui module.
+try:
+    from .ui.app import open_folder as _ui_open_folder
+except ImportError:
+    from ui.app import open_folder as _ui_open_folder
+
+open_folder = _ui_open_folder
+
 class ModernMessageBox(ctk.CTkToplevel):
     def __init__(self, parent, title, message, level="info", theme_colors=None, html_reports=None, index_report_path=None):
         super().__init__(parent)
@@ -2716,6 +2732,21 @@ class FolderSelectDialog(ctk.CTkToplevel):
         self.destroy()
 
 # --- UI 主介面類別 ---
+# Stage 13 (non-behavioral extraction): bind dialog classes to ui module.
+try:
+    from .ui.dialogs import (
+        FolderSelectDialog as _ui_FolderSelectDialog,
+        ModernMessageBox as _ui_ModernMessageBox,
+    )
+except ImportError:
+    from ui.dialogs import (
+        FolderSelectDialog as _ui_FolderSelectDialog,
+        ModernMessageBox as _ui_ModernMessageBox,
+    )
+
+ModernMessageBox = _ui_ModernMessageBox
+FolderSelectDialog = _ui_FolderSelectDialog
+
 class ImageOrganizerAppModern:
     def __init__(self, root):
         self.root = root

@@ -7,6 +7,12 @@ import subprocess
 import sys
 from tkinter import messagebox
 
+try:
+    from ..utils.sys_helpers import format_display_path
+except ImportError:  # pragma: no cover - direct script execution fallback
+    from utils.sys_helpers import format_display_path
+
+
 def open_folder(path_var, selected_paths=None):
     # 1. 取得目前的所有路徑清單
     paths = []

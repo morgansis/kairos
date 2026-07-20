@@ -1113,6 +1113,43 @@ compare_and_decide = _arb_compare_and_decide
 safe_rename_batch = _arb_safe_rename_batch
 second_pass_month = _arb_second_pass_month
 
+# Stage 4 (non-behavioral extraction): bind metadata parser and geo extract helpers.
+try:
+    from .metadata.exif_parser import (
+        get_camera_model as _meta_get_camera_model,
+        get_media_date as _meta_get_media_date,
+    )
+    from .metadata.geo_engine import (
+        _geo_dms_to_decimal as _meta_geo_dms_to_decimal,
+        _geo_extract_with_exifread as _meta_geo_extract_with_exifread,
+        _geo_extract_with_exiftool as _meta_geo_extract_with_exiftool,
+        _geo_extract_with_pillow_heif as _meta_geo_extract_with_pillow_heif,
+        _geo_ratio_to_float as _meta_geo_ratio_to_float,
+        extract_raw_coords as _meta_extract_raw_coords,
+    )
+except ImportError:
+    from metadata.exif_parser import (
+        get_camera_model as _meta_get_camera_model,
+        get_media_date as _meta_get_media_date,
+    )
+    from metadata.geo_engine import (
+        _geo_dms_to_decimal as _meta_geo_dms_to_decimal,
+        _geo_extract_with_exifread as _meta_geo_extract_with_exifread,
+        _geo_extract_with_exiftool as _meta_geo_extract_with_exiftool,
+        _geo_extract_with_pillow_heif as _meta_geo_extract_with_pillow_heif,
+        _geo_ratio_to_float as _meta_geo_ratio_to_float,
+        extract_raw_coords as _meta_extract_raw_coords,
+    )
+
+get_media_date = _meta_get_media_date
+get_camera_model = _meta_get_camera_model
+_geo_ratio_to_float = _meta_geo_ratio_to_float
+_geo_dms_to_decimal = _meta_geo_dms_to_decimal
+_geo_extract_with_exifread = _meta_geo_extract_with_exifread
+_geo_extract_with_exiftool = _meta_geo_extract_with_exiftool
+_geo_extract_with_pillow_heif = _meta_geo_extract_with_pillow_heif
+extract_raw_coords = _meta_extract_raw_coords
+
 def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, q=None, stop_event=None, start_time=0, processed_size=0, performance_mode=False):
     """第二輪後由實際目的地重建 HTML 索引，若開啟地理解析則進行批量極速反查，並同步更新 UI 進度與計時狀態"""
     records_by_group = defaultdict(list)

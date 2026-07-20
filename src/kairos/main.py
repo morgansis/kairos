@@ -3232,6 +3232,14 @@ class ImageOrganizerAppModern:
             self.save_config()
             self.root.destroy()
 
+# Stage 14 (non-behavioral extraction): bind app class to ui module.
+try:
+    from .ui.app import ImageOrganizerAppModern as _ui_ImageOrganizerAppModern
+except ImportError:
+    from ui.app import ImageOrganizerAppModern as _ui_ImageOrganizerAppModern
+
+ImageOrganizerAppModern = _ui_ImageOrganizerAppModern
+
 def sigint_handler(sig, frame):
     print("\n[系統] 接收到 Ctrl+C 中斷指令，正在安全停止背景執行緒並離開程式...")
     try:

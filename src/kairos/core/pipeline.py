@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 try:
@@ -30,7 +29,6 @@ try:
         classify_scan_outcome,
         requires_single_source_without_time_grouping,
     )
-    from .second_pass import run_second_pass
     from .source_scan import collect_source_files
 except ImportError:  # pragma: no cover - direct script execution fallback
     from config.constants import RAW_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
@@ -57,27 +55,10 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         classify_scan_outcome,
         requires_single_source_without_time_grouping,
     )
-    from core.second_pass import run_second_pass
     from core.source_scan import collect_source_files
 
 
 is_kairos_self_file = _rule_is_kairos_self_file
-
-
-def _norm_abs(path_value):
-    return os.path.normcase(os.path.abspath(str(path_value)))
-
-
-def _apply_rename_operations_to_seed_records(seed_records, rename_operations):
-    if not seed_records or not rename_operations:
-        return seed_records
-    for old_path, new_path in rename_operations:
-        old_key = _norm_abs(old_path)
-        new_key = _norm_abs(new_path)
-        if old_key not in seed_records:
-            continue
-        seed_records[new_key] = seed_records.pop(old_key)
-    return seed_records
 
 
 def threaded_process_images(
@@ -88,7 +69,6 @@ def threaded_process_images(
     enable_geo_lookup,
     copy_video,
     copy_raw,
-    overwrite,
     performance_mode,
     q,
     stop_event,
@@ -163,23 +143,12 @@ def threaded_process_images(
         dest_path=dest_path,
         organize_by_time=organize_by_time,
         normalize_name=normalize_name,
-        overwrite=overwrite,
         performance_mode=performance_mode,
         q=q,
         stop_event=stop_event,
         report_lines=report_lines,
         audit_manifest=audit_manifest,
     )
-
-    rename_operations = run_second_pass(
-        dest_path=dest_path,
-        organize_by_time=organize_by_time,
-        overwrite=overwrite,
-        stop_event=stop_event,
-        q=q,
-        processed_size_bytes=processed_size_bytes,
-    )
-    _apply_rename_operations_to_seed_records(manifest_seed_records, rename_operations)
 
     manifest_record_lookup = rebuild_folder_manifests(
         dest_path=dest_path,

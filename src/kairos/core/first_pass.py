@@ -22,7 +22,6 @@ try:
         candidate_path_for,
         find_identical_in_target,
         timestamp_parts,
-        unique_indexed_path,
         unique_path,
     )
     from ..utils.logger import PluginWarningCapturer
@@ -40,7 +39,6 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         candidate_path_for,
         find_identical_in_target,
         timestamp_parts,
-        unique_indexed_path,
         unique_path,
     )
     from utils.logger import PluginWarningCapturer
@@ -77,7 +75,6 @@ def run_first_pass(
     dest_path,
     organize_by_time,
     normalize_name,
-    overwrite,
     performance_mode,
     q,
     stop_event,
@@ -191,61 +188,66 @@ def run_first_pass(
             skip_reason = None
             target_stem = target_file.stem
             identical_match = find_identical_in_target(file_path, target_dir, target_stem, ext)
+            candidate_dir = target_dir / "candidate"
+            candidate_has_similar = False
+            candidate_identical = None
+            if category == "standard" and ext in STANDARD_EXTENSIONS and candidate_dir.exists():
+                candidate_has_similar = any(candidate_dir.glob(f"{target_stem}*{ext}"))
+                candidate_identical = find_identical_in_target(file_path, candidate_dir, target_stem, ext)
 
             if identical_match:
                 is_duplicate_skip = True
                 skip_reason = f"[IDENTICAL] {identical_match.name}"
                 target_file = identical_match
+            elif candidate_identical is not None:
+                is_duplicate_skip = True
+                skip_reason = f"[IDENTICAL] candidate/{candidate_identical.name}"
+                target_file = candidate_identical
             elif target_file.exists():
-                overwrite_photo_mode = overwrite and category == "standard" and ext in STANDARD_EXTENSIONS
+                candidate_photo_mode = category == "standard" and ext in STANDARD_EXTENSIONS
                 decision = compare_and_decide(file_path, target_file)
 
                 if decision == "IDENTICAL":
                     is_duplicate_skip = True
                     skip_reason = f"[IDENTICAL] {target_file.name}"
-                elif overwrite_photo_mode and decision == "SAME_MS":
-                    src_mtime = os.path.getmtime(file_path)
-                    tgt_mtime = os.path.getmtime(target_file)
-                    if src_mtime > tgt_mtime:
-                        archived = candidate_path_for(target_dir, target_file.stem, ext)
+                elif candidate_photo_mode:
+                    base_stem = timestamp_base or target_file.stem
+                    src_ms = src_capture_meta.get("subsec_ms")
+                    candidate_dir = target_dir / "candidate"
+                    candidate_dir.mkdir(parents=True, exist_ok=True)
+
+                    if target_file.parent.name != "candidate":
+                        if decision == "BURST":
+                            tgt_meta = get_capture_meta(target_file)
+                            tgt_ms = tgt_meta.get("subsec_ms")
+                            if tgt_ms:
+                                archived = unique_path(candidate_dir, f"{base_stem}-{tgt_ms}", ext)
+                            else:
+                                archived = candidate_path_for(target_dir, base_stem, ext)
+                        else:
+                            archived = candidate_path_for(target_dir, base_stem, ext)
                         invalidate_capture_meta(target_file)
                         invalidate_capture_meta(archived)
                         target_file.rename(archived)
                         if not performance_mode:
-                            q.put(("log", f"[OVERWRITE] SAME_MS: archived previous to candidate -> {archived.name}"))
-                    else:
-                        target_file = candidate_path_for(target_dir, target_file.stem, ext)
-                        effective_category = "candidate" if category == "standard" else category
-                elif overwrite_photo_mode and decision == "BURST":
-                    tgt_meta = get_capture_meta(target_file)
-                    base_stem = timestamp_base or target_file.stem
-                    src_ms = src_capture_meta.get("subsec_ms")
-                    tgt_ms = tgt_meta.get("subsec_ms")
+                            q.put(("log", f"[CANDIDATE] promoted existing -> {archived.name}"))
 
-                    if tgt_ms and target_file.stem == base_stem:
-                        existing_burst_path = unique_path(target_dir, f"{base_stem}-{tgt_ms}", ext)
-                        invalidate_capture_meta(target_file)
-                        invalidate_capture_meta(existing_burst_path)
-                        target_file.rename(existing_burst_path)
-                        if not performance_mode:
-                            q.put(("log", f"[OVERWRITE] BURST: renamed existing -> {existing_burst_path.name}"))
-
-                    if src_ms:
-                        target_file = unique_path(target_dir, f"{base_stem}-{src_ms}", ext)
+                    if decision == "BURST" and src_ms:
+                        target_file = unique_path(candidate_dir, f"{base_stem}-{src_ms}", ext)
                     else:
-                        target_file = unique_indexed_path(target_dir, base_stem, ext, start=1)
-                elif overwrite_photo_mode and decision == "REPLACE":
-                    archived = candidate_path_for(target_dir, target_file.stem, ext)
-                    invalidate_capture_meta(target_file)
-                    invalidate_capture_meta(archived)
-                    target_file.rename(archived)
-                    if not performance_mode:
-                        q.put(("log", f"[OVERWRITE] REPLACE: archived previous to candidate -> {archived.name}"))
-                elif overwrite_photo_mode and decision == "KEEP":
-                    target_file = candidate_path_for(target_dir, target_file.stem, ext)
-                    effective_category = "candidate" if category == "standard" else category
+                        target_file = candidate_path_for(target_dir, base_stem, ext)
+                    effective_category = "candidate"
                 else:
                     target_file = unique_path(target_dir, target_file.stem, ext)
+            elif category == "standard" and ext in STANDARD_EXTENSIONS and candidate_has_similar:
+                base_stem = timestamp_base or target_stem
+                src_ms = src_capture_meta.get("subsec_ms")
+                candidate_dir.mkdir(parents=True, exist_ok=True)
+                if src_ms:
+                    target_file = unique_path(candidate_dir, f"{base_stem}-{src_ms}", ext)
+                else:
+                    target_file = candidate_path_for(target_dir, base_stem, ext)
+                effective_category = "candidate"
 
             if target_file.parent.name == "candidate" and effective_category == "standard":
                 effective_category = "candidate"

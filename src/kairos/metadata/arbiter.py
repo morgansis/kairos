@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import time
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
@@ -26,8 +24,6 @@ try:
     )
     from ..utils.file_ops import (
         is_identical_file,
-        timestamp_parts,
-        unique_path,
     )
 except ImportError:  # pragma: no cover - direct script execution fallback
     from config.constants import (
@@ -40,8 +36,6 @@ except ImportError:  # pragma: no cover - direct script execution fallback
     )
     from utils.file_ops import (
         is_identical_file,
-        timestamp_parts,
-        unique_path,
     )
 
 DECISIONS = ("IDENTICAL", "SAME_MS", "BURST", "REPLACE", "KEEP")
@@ -184,80 +178,6 @@ def compare_and_decide(src_path, target_path):
         return "KEEP"
 
 
-def safe_rename_batch(rename_map):
-    """Rename through staging names to avoid overwrite collisions in one batch."""
-    targets = list(rename_map.values())
-    if len(targets) != len(set(targets)):
-        raise ValueError("Rename collision: duplicate target paths in rename_map.")
-    unmanaged_targets = [target for target in targets if target.exists() and target not in rename_map]
-    if unmanaged_targets:
-        raise FileExistsError(f"Unmanaged target already exists: {unmanaged_targets[0]}")
-
-    staged = []
-    applied = []
-    for index, (source, target) in enumerate(rename_map.items()):
-        if source == target:
-            continue
-        temp = source.with_name(f".__kairos_stage_{index}_{source.name}")
-        while temp.exists():
-            temp = temp.with_name(f".__kairos_stage_{index}_{time.time_ns()}_{source.name}")
-        source.rename(temp)
-        staged.append((temp, target, source))
-
-    for temp, target, source in staged:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            raise FileExistsError(f"Rename target already exists: {target}")
-        temp.rename(target)
-        applied.append((source, target))
-    return applied
-
-
-def second_pass_month(month_dir, stop_event):
-    """Group by second + extension to process burst/candidate arrangement."""
-    rename_operations = []
-    groups = defaultdict(list)
-    for path in month_dir.iterdir():
-        if stop_event.is_set():
-            return rename_operations
-        if not path.is_file() or path.suffix.lower() not in STANDARD_EXTENSIONS:
-            continue
-        base, _ = timestamp_parts(path.stem)
-        if base:
-            groups[(base, path.suffix.lower())].append(path)
-
-    for (base, ext), members in groups.items():
-        if stop_event.is_set() or len(members) < 2:
-            continue
-        known, unknown = defaultdict(list), []
-        for member in members:
-            subsec = normalized_subsec(get_exif_subsec(member))
-            (known[subsec] if subsec else unknown).append(member)
-
-        rename_map = {}
-        for subsec, variants in known.items():
-            winner = max(variants, key=lambda p: p.stat().st_mtime)
-            if len(known) == 1:
-                winner_name = f"{base}{ext}"
-            else:
-                winner_name = f"{base}-{subsec}{ext}"
-            rename_map[winner] = month_dir / winner_name
-            candidate_index = 1
-            for variant in variants:
-                if variant == winner:
-                    continue
-                target = unique_path(month_dir / "candidate", f"{base}-{subsec}-c{candidate_index}", ext)
-                rename_map[variant] = target
-                candidate_index += 1
-
-        for index, member in enumerate(sorted(unknown, key=lambda p: p.name), start=1):
-            rename_map[member] = month_dir / f"{base}-u{index}{ext}"
-
-        rename_operations.extend(safe_rename_batch(rename_map))
-
-    return rename_operations
-
-
 __all__ = [
     "DECISIONS",
     "CAPTURE_META_CACHE",
@@ -269,6 +189,4 @@ __all__ = [
     "is_same_millisecond_capture",
     "is_burst_shot",
     "compare_and_decide",
-    "safe_rename_batch",
-    "second_pass_month",
 ]

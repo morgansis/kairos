@@ -168,10 +168,8 @@ class ImageOrganizerAppModern:
         self.enable_geo_lookup_var = tk.BooleanVar(value=False)  # 預設關閉地理位置解析以提升速度
         self.copy_video_var = tk.BooleanVar(value=True)          # 掃描包含 VIDEO 檔
         self.copy_raw_var = tk.BooleanVar(value=False)           # 掃描包含 RAW 檔
-        self.overwrite_var = tk.BooleanVar(value=False)          # 強制覆蓋 (連拍保護 & 留新不留舊)
         self.performance_mode_var = tk.BooleanVar(value=False)   # 效能模式：精簡 LOG / 快速掃描 / GEO 失敗摘要
         self.theme_var = tk.StringVar(value=DEFAULT_THEME_NAME)
-
         self.load_config()
 
         # === 標題區 ===
@@ -260,8 +258,6 @@ class ImageOrganizerAppModern:
         self.vid_checkbox.pack(side="left", padx=(0, 15))
         self.raw_checkbox = ctk.CTkCheckBox(options_frame, text="掃描包含 RAW 檔", variable=self.copy_raw_var, font=app_font)
         self.raw_checkbox.pack(side="left", padx=(0, 15))
-        self.overwrite_checkbox = ctk.CTkCheckBox(options_frame, text="同時間戳留較新檔（其餘移至 candidate）", variable=self.overwrite_var, font=app_font)
-        self.overwrite_checkbox.pack(side="left", padx=(0, 15))
         self.performance_checkbox = ctk.CTkCheckBox(options_frame, text="效能模式 (精簡 LOG / 快速掃描 / GEO 失敗摘要)", variable=self.performance_mode_var, font=app_font)
         self.performance_checkbox.pack(side="left", padx=(0, 15))
 
@@ -366,7 +362,7 @@ class ImageOrganizerAppModern:
         self.theme_menu.configure(fg_color=t["MAIN"], button_color=t["MAIN"], button_hover_color=t["HOVER"])
         self.verify_btn.configure(fg_color=t["MAIN"], hover_color=t["HOVER"])
 
-        for chk in [self.norm_chk, self.time_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
+        for chk in [self.norm_chk, self.time_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.performance_checkbox]:
             chk.configure(fg_color=t["MAIN"], hover_color=t["HOVER"], text_color=t["TEXT"])
 
         # === 執行按鈕 (需判斷是否在執行中) ===
@@ -408,7 +404,6 @@ class ImageOrganizerAppModern:
                     self.performance_mode_var.set(config.getboolean('Settings', 'PerformanceMode', fallback=False))
                     self.copy_video_var.set(config.getboolean('Settings', 'CopyVideo', fallback=True))
                     self.copy_raw_var.set(config.getboolean('Settings', 'CopyRAW', fallback=False))
-                    self.overwrite_var.set(config.getboolean('Settings', 'Overwrite', fallback=False))
                     saved_theme = config.get('Settings', 'Theme', fallback=DEFAULT_THEME_NAME)
                     if saved_theme in THEMES: self.theme_var.set(saved_theme)
             except Exception: pass
@@ -424,7 +419,6 @@ class ImageOrganizerAppModern:
             'PerformanceMode': str(self.performance_mode_var.get()),
             'CopyVideo': str(self.copy_video_var.get()),
             'CopyRAW': str(self.copy_raw_var.get()),
-            'Overwrite': str(self.overwrite_var.get()),
             'Theme': str(self.theme_var.get())
         }
         try:
@@ -624,7 +618,7 @@ class ImageOrganizerAppModern:
         # 3. 恢復介面按鈕與核取方塊的互動功能 (維持原樣)
         t = THEMES[self.theme_var.get()]
         self.start_btn.configure(state='normal', text="開始執行", fg_color=t["MAIN"], hover_color=t["HOVER"])
-        for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
+        for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.performance_checkbox]:
             chk.configure(state='normal')
         self.theme_menu.configure(state='normal')
         self.btn_browse_src.configure(state='normal')
@@ -647,7 +641,7 @@ class ImageOrganizerAppModern:
 
         t = THEMES[self.theme_var.get()]
         self.start_btn.configure(text="停止處理", fg_color=t["STOP"], hover_color=t["HOVER"])
-        for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
+        for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.performance_checkbox]:
             chk.configure(state='disabled')
         self.theme_menu.configure(state='disabled')
         self.btn_browse_src.configure(state='disabled')
@@ -729,7 +723,7 @@ class ImageOrganizerAppModern:
 
         t = THEMES[self.theme_var.get()]
         self.start_btn.configure(text="停止處理", fg_color=t["STOP"], hover_color=t["HOVER"])
-        for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
+        for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.performance_checkbox]:
             chk.configure(state='disabled')
         self.theme_menu.configure(state='disabled')
         self.btn_browse_src.configure(state='disabled')
@@ -746,7 +740,7 @@ class ImageOrganizerAppModern:
 
         self.thread = threading.Thread(
             target=threaded_process_images,
-            args=(self.selected_src_folders, dest, self.organize_by_time_var.get(), self.normalize_name_var.get(), self.enable_geo_lookup_var.get(), self.copy_video_var.get(), self.copy_raw_var.get(), self.overwrite_var.get(), self.performance_mode_var.get(), self.queue, self.stop_event),
+            args=(self.selected_src_folders, dest, self.organize_by_time_var.get(), self.normalize_name_var.get(), self.enable_geo_lookup_var.get(), self.copy_video_var.get(), self.copy_raw_var.get(), self.performance_mode_var.get(), self.queue, self.stop_event),
             daemon=True
         )
         self.thread.start()

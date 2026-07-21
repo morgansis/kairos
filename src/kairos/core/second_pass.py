@@ -16,10 +16,11 @@ except ImportError:  # pragma: no cover - direct script execution fallback
 def run_second_pass(dest_path, organize_by_time, overwrite, stop_event, q, processed_size_bytes):
     """Run second-pass month-level burst/candidate organization."""
     if stop_event.is_set() or not organize_by_time or not overwrite:
-        return
+        return []
 
     month_dirs = [p for p in dest_path.iterdir() if p.is_dir() and re.fullmatch(r"\d{4}_\d{2}", p.name)]
     second_start = time.time()
+    rename_operations = []
     for index, month_dir in enumerate(month_dirs, start=1):
         elapsed = time.time() - second_start
         rate = (index - 1) / elapsed if elapsed > 0 and index > 1 else 0
@@ -28,13 +29,14 @@ def run_second_pass(dest_path, organize_by_time, overwrite, stop_event, q, proce
             (
                 "status",
                 f"Second Pass | organizing burst sets and alternates: {index} / {len(month_dirs)} "
-                f"({index / max(len(month_dirs), 1):.1%}) | elapsed {format_time(elapsed)} | "
+                f"| elapsed {format_time(elapsed)} | "
                 f"overall ETA {format_time(remaining)} | {month_dir.name}",
             )
         )
-        second_pass_month(month_dir, stop_event)
+        rename_operations.extend(second_pass_month(month_dir, stop_event))
         q.put(("progress", index / max(len(month_dirs), 1)))
         q.put(("metrics", processed_size_bytes))
+    return rename_operations
 
 
 __all__ = ["run_second_pass"]

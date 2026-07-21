@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 import time
-from pathlib import Path
-from datetime import datetime
 from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
 
 try:
     import exifread
@@ -188,11 +188,13 @@ def safe_rename_batch(rename_map):
     """Rename through staging names to avoid overwrite collisions in one batch."""
     targets = list(rename_map.values())
     if len(targets) != len(set(targets)):
-        raise ValueError("第二輪命名計畫有重複目標；未進行任何改名")
+        raise ValueError("Rename collision: duplicate target paths in rename_map.")
     unmanaged_targets = [target for target in targets if target.exists() and target not in rename_map]
     if unmanaged_targets:
-        raise FileExistsError(f"第二輪目標已存在且不屬於目前群組：{unmanaged_targets[0]}")
+        raise FileExistsError(f"Unmanaged target already exists: {unmanaged_targets[0]}")
+
     staged = []
+    applied = []
     for index, (source, target) in enumerate(rename_map.items()):
         if source == target:
             continue
@@ -200,20 +202,24 @@ def safe_rename_batch(rename_map):
         while temp.exists():
             temp = temp.with_name(f".__kairos_stage_{index}_{time.time_ns()}_{source.name}")
         source.rename(temp)
-        staged.append((temp, target))
-    for temp, target in staged:
+        staged.append((temp, target, source))
+
+    for temp, target, source in staged:
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists():
-            raise FileExistsError(f"第二輪目標已存在：{target}")
+            raise FileExistsError(f"Rename target already exists: {target}")
         temp.rename(target)
+        applied.append((source, target))
+    return applied
 
 
 def second_pass_month(month_dir, stop_event):
     """Group by second + extension to process burst/candidate arrangement."""
+    rename_operations = []
     groups = defaultdict(list)
     for path in month_dir.iterdir():
         if stop_event.is_set():
-            return
+            return rename_operations
         if not path.is_file() or path.suffix.lower() not in STANDARD_EXTENSIONS:
             continue
         base, _ = timestamp_parts(path.stem)
@@ -247,7 +253,9 @@ def second_pass_month(month_dir, stop_event):
         for index, member in enumerate(sorted(unknown, key=lambda p: p.name), start=1):
             rename_map[member] = month_dir / f"{base}-u{index}{ext}"
 
-        safe_rename_batch(rename_map)
+        rename_operations.extend(safe_rename_batch(rename_map))
+
+    return rename_operations
 
 
 __all__ = [

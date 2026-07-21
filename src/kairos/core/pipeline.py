@@ -2,29 +2,20 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 try:
+    from ..config.constants import RAW_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
+    from ..config.rules import is_kairos_self_file as _rule_is_kairos_self_file
     from ..database.auditor import emit_completion_dialog
     from ..database.manifest_db import (
         build_skiplist_append_message,
         export_audit_bundle,
+        load_and_merge_manifest_indexes,
+        rebuild_folder_manifests,
+        recover_manifest_transactions,
     )
-    from .source_scan import collect_source_files
-    from .first_pass import run_first_pass
-    from .second_pass import run_second_pass
-    from .final_phase import build_final_phase_outputs
-    from .preflight import (
-        build_valid_extensions,
-        classify_scan_outcome,
-        requires_single_source_without_time_grouping,
-    )
-    from ..config.constants import (
-        RAW_EXTENSIONS,
-        STANDARD_EXTENSIONS,
-        VIDEO_EXTENSIONS,
-    )
-    from ..config.rules import is_kairos_self_file as _rule_is_kairos_self_file
     from ..metadata.arbiter import CAPTURE_META_CACHE
     from ..metadata.geo_engine import (
         GEO_PERF_STATS,
@@ -32,27 +23,26 @@ try:
         prepare_geo_runtime,
         reset_geo_perf_stats,
     )
-except ImportError:  # pragma: no cover - direct script execution fallback
-    from database.auditor import emit_completion_dialog
-    from database.manifest_db import (
-        build_skiplist_append_message,
-        export_audit_bundle,
-    )
-    from core.source_scan import collect_source_files
-    from core.first_pass import run_first_pass
-    from core.second_pass import run_second_pass
-    from core.final_phase import build_final_phase_outputs
-    from core.preflight import (
+    from .final_phase import build_final_phase_outputs
+    from .first_pass import run_first_pass
+    from .preflight import (
         build_valid_extensions,
         classify_scan_outcome,
         requires_single_source_without_time_grouping,
     )
-    from config.constants import (
-        RAW_EXTENSIONS,
-        STANDARD_EXTENSIONS,
-        VIDEO_EXTENSIONS,
-    )
+    from .second_pass import run_second_pass
+    from .source_scan import collect_source_files
+except ImportError:  # pragma: no cover - direct script execution fallback
+    from config.constants import RAW_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
     from config.rules import is_kairos_self_file as _rule_is_kairos_self_file
+    from database.auditor import emit_completion_dialog
+    from database.manifest_db import (
+        build_skiplist_append_message,
+        export_audit_bundle,
+        load_and_merge_manifest_indexes,
+        rebuild_folder_manifests,
+        recover_manifest_transactions,
+    )
     from metadata.arbiter import CAPTURE_META_CACHE
     from metadata.geo_engine import (
         GEO_PERF_STATS,
@@ -60,32 +50,75 @@ except ImportError:  # pragma: no cover - direct script execution fallback
         prepare_geo_runtime,
         reset_geo_perf_stats,
     )
+    from core.final_phase import build_final_phase_outputs
+    from core.first_pass import run_first_pass
+    from core.preflight import (
+        build_valid_extensions,
+        classify_scan_outcome,
+        requires_single_source_without_time_grouping,
+    )
+    from core.second_pass import run_second_pass
+    from core.source_scan import collect_source_files
 
-# Bind to centralized rule implementation.
+
 is_kairos_self_file = _rule_is_kairos_self_file
 
-def threaded_process_images(selected_folders, dest_dir, organize_by_time, normalize_name, enable_geo_lookup, copy_video, copy_raw, overwrite, performance_mode, q, stop_event):
+
+def _norm_abs(path_value):
+    return os.path.normcase(os.path.abspath(str(path_value)))
+
+
+def _apply_rename_operations_to_seed_records(seed_records, rename_operations):
+    if not seed_records or not rename_operations:
+        return seed_records
+    for old_path, new_path in rename_operations:
+        old_key = _norm_abs(old_path)
+        new_key = _norm_abs(new_path)
+        if old_key not in seed_records:
+            continue
+        seed_records[new_key] = seed_records.pop(old_key)
+    return seed_records
+
+
+def threaded_process_images(
+    selected_folders,
+    dest_dir,
+    organize_by_time,
+    normalize_name,
+    enable_geo_lookup,
+    copy_video,
+    copy_raw,
+    overwrite,
+    performance_mode,
+    q,
+    stop_event,
+):
     dest_path = Path(dest_dir)
     report_lines = []
     audit_manifest = []
     CAPTURE_META_CACHE.clear()
 
-    # 歸零全域戰情數據
     reset_geo_perf_stats(GEO_PERF_STATS)
 
     if performance_mode:
-        q.put(('log', "[PERF] Performance mode enabled: less log / fast scan / GEO fail summary"))
+        q.put(("log", "[PERF] Performance mode enabled: less log / fast scan / GEO fail summary"))
 
     if requires_single_source_without_time_grouping(organize_by_time, selected_folders):
-        q.put(('msgbox', ("設定錯誤", "未啟用依年月整理時，來源與目的資料夾為 1:1，無法處理多個來源資料夾。"), 'warning', None))
-        q.put(('reset', None))
+        q.put(("msgbox", ("Warning", "When organize-by-time is disabled, only one source folder is supported."), "warning", None))
+        q.put(("reset", None))
         return
 
-    # 🚀 執行前：搜尋原本來源目錄 (及父目錄) 與目的目錄，聯集載入歷史 _manifest_geo.json
     if enable_geo_lookup:
-        load_and_merge_geo_caches(selected_folders, dest_dir, log_callback=lambda m: q.put(('log', m)))
+        load_and_merge_geo_caches(selected_folders, dest_dir, log_callback=lambda m: q.put(("log", m)))
 
     enable_geo_lookup = prepare_geo_runtime(enable_geo_lookup, q)
+    recover_manifest_transactions(dest_path=dest_path, log_callback=lambda m: q.put(("log", m)))
+
+    manifest_indexes = load_and_merge_manifest_indexes(
+        source_folders=selected_folders,
+        dest_dir=dest_dir,
+        log_callback=lambda m: q.put(("log", m)),
+    )
 
     valid_extensions = build_valid_extensions(
         copy_raw=copy_raw,
@@ -107,14 +140,13 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
 
     scan_outcome = classify_scan_outcome(stop_event, files)
     if scan_outcome == "interrupted":
-        q.put(('status', "🛑 Processing interrupted"))
-        q.put(('reset', None))
+        q.put(("status", "Processing interrupted"))
+        q.put(("reset", None))
         return
 
-    total_files = len(files)
     if scan_outcome == "empty":
-        q.put(('msgbox', ("提示", "所選目錄中找不到符合的媒體檔。"), 'info', None))
-        q.put(('reset', None))
+        q.put(("msgbox", ("Info", "No valid source files found."), "info", None))
+        q.put(("reset", None))
         return
 
     (
@@ -123,7 +155,8 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         failed_count,
         start_time,
         processed_size_bytes,
-        monthly_media_map,
+        _monthly_media_map,
+        manifest_seed_records,
     ) = run_first_pass(
         files=files,
         selected_folders=selected_folders,
@@ -138,13 +171,22 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         audit_manifest=audit_manifest,
     )
 
-    run_second_pass(
+    rename_operations = run_second_pass(
         dest_path=dest_path,
         organize_by_time=organize_by_time,
         overwrite=overwrite,
         stop_event=stop_event,
         q=q,
         processed_size_bytes=processed_size_bytes,
+    )
+    _apply_rename_operations_to_seed_records(manifest_seed_records, rename_operations)
+
+    manifest_record_lookup = rebuild_folder_manifests(
+        dest_path=dest_path,
+        organize_by_time=organize_by_time,
+        inherited_indexes=manifest_indexes,
+        known_records=manifest_seed_records,
+        log_callback=lambda m: q.put(("log", m)),
     )
 
     (
@@ -165,7 +207,9 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         performance_mode=performance_mode,
         success_count=success_count,
         skipped_count=skipped_count,
+        manifest_record_lookup=manifest_record_lookup,
     )
+
     index_report_path = export_audit_bundle(
         dest_path=dest_path,
         audit_manifest=audit_manifest,
@@ -191,6 +235,7 @@ def threaded_process_images(selected_folders, dest_dir, organize_by_time, normal
         index_report_path=index_report_path,
     )
 
-    q.put(('reset', None))
+    q.put(("reset", None))
+
 
 __all__ = ["is_kairos_self_file", "threaded_process_images"]

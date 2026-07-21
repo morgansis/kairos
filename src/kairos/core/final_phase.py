@@ -32,6 +32,7 @@ def build_final_phase_outputs(
     performance_mode,
     success_count,
     skipped_count,
+    manifest_record_lookup=None,
 ):
     """Collect final media records, GEO stats, and monthly HTML report paths."""
     generated_html_reports = []
@@ -58,6 +59,7 @@ def build_final_phase_outputs(
         start_time,
         processed_size_bytes,
         performance_mode,
+        manifest_record_lookup,
     )
 
     if enable_geo_lookup:

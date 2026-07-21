@@ -28,33 +28,40 @@ except ImportError:  # pragma: no cover - direct script execution fallback
     from metadata.video_parser import video_camera_model, video_creation_date
 
 
-def get_media_date(file_path):
+def get_media_date_with_source(file_path):
+    """Return media datetime plus metadata source."""
     ext = Path(file_path).suffix.lower()
 
     if ext in VIDEO_EXTENSIONS:
         creation_dt = video_creation_date(file_path)
         if creation_dt is not None:
-            return creation_dt
-    else:
-        if EXIFREAD_AVAILABLE:
-            try:
-                with open(file_path, "rb") as f:
-                    tags = exifread.process_file(f, stop_tag="EXIF DateTimeOriginal", details=False)
-                    if "EXIF DateTimeOriginal" in tags:
-                        return datetime.strptime(str(tags["EXIF DateTimeOriginal"]), "%Y:%m:%d %H:%M:%S")
-            except Exception:
-                pass
+            return creation_dt, "hachoir"
+        return datetime.fromtimestamp(os.path.getmtime(file_path)), "mtime"
 
-        if PIL_AVAILABLE:
-            try:
-                with Image.open(file_path) as img:
-                    exif = img._getexif()
-                    if exif and DATE_TIME_ORIGINAL_TAG in exif:
-                        return datetime.strptime(exif[DATE_TIME_ORIGINAL_TAG], "%Y:%m:%d %H:%M:%S")
-            except Exception:
-                pass
+    if EXIFREAD_AVAILABLE:
+        try:
+            with open(file_path, "rb") as f:
+                tags = exifread.process_file(f, stop_tag="EXIF DateTimeOriginal", details=False)
+                if "EXIF DateTimeOriginal" in tags:
+                    return datetime.strptime(str(tags["EXIF DateTimeOriginal"]), "%Y:%m:%d %H:%M:%S"), "exifread"
+        except Exception:
+            pass
 
-    return datetime.fromtimestamp(os.path.getmtime(file_path))
+    if PIL_AVAILABLE:
+        try:
+            with Image.open(file_path) as img:
+                exif = img._getexif()
+                if exif and DATE_TIME_ORIGINAL_TAG in exif:
+                    return datetime.strptime(exif[DATE_TIME_ORIGINAL_TAG], "%Y:%m:%d %H:%M:%S"), "pillow"
+        except Exception:
+            pass
+
+    return datetime.fromtimestamp(os.path.getmtime(file_path)), "mtime"
+
+
+def get_media_date(file_path):
+    media_dt, _source = get_media_date_with_source(file_path)
+    return media_dt
 
 
 def get_camera_model(file_path):
@@ -86,6 +93,7 @@ def get_camera_model(file_path):
 __all__ = [
     "EXIFREAD_AVAILABLE",
     "PIL_AVAILABLE",
+    "get_media_date_with_source",
     "get_media_date",
     "get_camera_model",
 ]

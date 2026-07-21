@@ -70,12 +70,12 @@ def prepare_geo_runtime(enable_geo_lookup, q):
         q.put(("log", "[GEO] FAIL: reverse_geocoder unavailable; only EXIF GPS and map URL will be used."))
 
     if enable_geo_lookup and RG_AVAILABLE:
-        q.put(("status", "⏳ Loading global offline geo database (first load may take a few seconds)..."))
+        q.put(("status", "Loading global offline geo database (first load may take a few seconds)..."))
         try:
             _ = rg.search((24.989, 121.313))
-            q.put(("log", "✅ Global offline geo database loaded and index warmed up."))
+            q.put(("log", "Global offline geo database loaded and index warmed up."))
         except Exception as e:
-            q.put(("log", f"⚠️ [GEO] ERROR: database preload failed: {e}"))
+            q.put(("log", f"[GEO] ERROR: database preload failed: {e}"))
             return False
 
     return enable_geo_lookup
@@ -145,11 +145,11 @@ def get_stats_banner_html():
 
     return f"""
     <div style="background: #EAF2F8; border-left: 4px solid #2980B9; padding: 12px 18px; margin: 15px 0; border-radius: 6px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 20px; color: #2C3E50; box-shadow: 0 1px 3px rgba(0,0,0,0.05); line-height: 1.6;">
-        <span>⏱️ <b>總處理耗時:</b> {t_time}</span>
-        <span>📁 <b>實體複製與歸檔:</b> {copied:,} 張 <small style="color:#7F8C8D;">(物理去重略過 {skipped:,} 張)</small></span>
-        <span>🌏 <b>地理座標查詢:</b> 共 {queries:,} 次</span>
-        <span>⚡ <b>快取命中與重用:</b> {hits:,} 次 (<span style="color:#27AE60; font-weight:bold;">{hit_rate:.1f}% 繼承或重用</span>)</span>
-        <span>🔍 <b>新增空間反查:</b> {new_l:,} 次 <small style="color:#2980B9;">(極速批量 C++ KD-Tree)</small></span>
+        <span><b>總處理耗時:</b> {t_time}</span>
+        <span><b>實體複製與歸檔:</b> {copied:,} 張 <small style="color:#7F8C8D;">(物理去重略過 {skipped:,} 張)</small></span>
+        <span><b>地理座標查詢:</b> 共 {queries:,} 次</span>
+        <span><b>快取命中與重用:</b> {hits:,} 次 (<span style="color:#27AE60; font-weight:bold;">{hit_rate:.1f}% 繼承或重用</span>)</span>
+        <span><b>新增空間反查:</b> {new_l:,} 次 <small style="color:#2980B9;">(極速批量 C++ KD-Tree)</small></span>
     </div>
     """
 
@@ -274,9 +274,20 @@ def extract_raw_coords(file_path):
 
     return lat, lon, None
 
-def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, q=None, stop_event=None, start_time=0, processed_size=0, performance_mode=False):
+def collect_media_records(
+    dest_path,
+    organize_by_time,
+    enable_geo_lookup=False,
+    q=None,
+    stop_event=None,
+    start_time=0,
+    processed_size=0,
+    performance_mode=False,
+    manifest_record_lookup=None,
+):
     """第二輪後由實際目的地重建 HTML 索引，若開啟地理解析則進行批量極速反查，並同步更新 UI 進度與計時狀態"""
     records_by_group = defaultdict(list)
+    manifest_lookup = manifest_record_lookup or {}
     geo_log_callback = (lambda message: q.put(('log', message))) if (q and not performance_mode) else None
     geo_stats = {'pass': 0, 'fail': 0, 'skip': 0}
     geo_fail_by_abs_path = {}
@@ -317,8 +328,14 @@ def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, 
             'name': path.name, 'rel_path': path.relative_to(dest_path).as_posix(),
             'size': path.stat().st_size, 'category': category,
             'group_key': base or path.stem, 'group_order': 1 if category == 'candidate' else 0,
-            'loc_name': loc_name, 'map_url': map_url
+            'loc_name': loc_name, 'map_url': map_url,
+            'bundle_id': '',
+            'linked_raw_paths': [],
         }
+        manifest_info = manifest_lookup.get(os.path.normcase(os.path.abspath(str(path))))
+        if manifest_info:
+            rec_dict["bundle_id"] = str(manifest_info.get("bundle_id", ""))
+            rec_dict["linked_raw_paths"] = list(manifest_info.get("linked_raw_paths", []))
         records_by_group[month_key].append(rec_dict)
 
         if enable_geo_lookup and needs_geo_lookup:
@@ -351,11 +368,11 @@ def collect_media_records(dest_path, organize_by_time, enable_geo_lookup=False, 
         elif enable_geo_lookup and not needs_geo_lookup:
             geo_stats['skip'] += 1
 
-    # 🚀 執行 C++ 批量矩陣查詢 (Batch Geocoding)
+    # 執行 C++ 批量矩陣查詢 (Batch Geocoding)
     if unique_keys_to_query and RG_AVAILABLE:
         query_list = list(unique_keys_to_query)
         if q:
-            q.put(('status', f"🚀 正在調用 reverse_geocoder 批量解析 ({len(query_list)} 組全新空間座標)..."))
+            q.put(('status', f"正在調用 reverse_geocoder 批量解析 ({len(query_list)} 組全新空間座標)..."))
         try:
             res_list = rg.search(query_list)
             for idx, coord_key in enumerate(query_list):

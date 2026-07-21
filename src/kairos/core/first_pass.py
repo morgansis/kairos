@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
-import time
 import shutil
-from pathlib import Path
+import time
 from datetime import datetime
+from pathlib import Path
 
 try:
     from ..config.constants import PLACEHOLDER, RAW_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
+    from ..database.manifest_db import (
+        begin_manifest_transaction,
+        commit_manifest_transaction,
+        fail_manifest_transaction,
+    )
     from ..metadata.arbiter import compare_and_decide, get_capture_meta, invalidate_capture_meta
-    from ..metadata.exif_parser import get_camera_model, get_media_date
+    from ..metadata.exif_parser import get_camera_model, get_media_date_with_source
     from ..utils.file_ops import (
         candidate_path_for,
         find_identical_in_target,
@@ -23,8 +29,13 @@ try:
     from ..utils.sys_helpers import format_display_path, format_time
 except ImportError:  # pragma: no cover - direct script execution fallback
     from config.constants import PLACEHOLDER, RAW_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
+    from database.manifest_db import (
+        begin_manifest_transaction,
+        commit_manifest_transaction,
+        fail_manifest_transaction,
+    )
     from metadata.arbiter import compare_and_decide, get_capture_meta, invalidate_capture_meta
-    from metadata.exif_parser import get_camera_model, get_media_date
+    from metadata.exif_parser import get_camera_model, get_media_date_with_source
     from utils.file_ops import (
         candidate_path_for,
         find_identical_in_target,
@@ -34,6 +45,30 @@ except ImportError:  # pragma: no cover - direct script execution fallback
     )
     from utils.logger import PluginWarningCapturer
     from utils.sys_helpers import format_display_path, format_time
+
+
+def _norm_abs(path_value):
+    return os.path.normcase(os.path.abspath(str(path_value)))
+
+
+def _stream_copy_with_hash(src_path, dst_path, chunk_size=1024 * 1024):
+    """Copy bytes once while computing SHA-256 from the same stream."""
+    digest = hashlib.sha256()
+    with open(src_path, "rb") as src, open(dst_path, "wb") as dst:
+        for chunk in iter(lambda: src.read(chunk_size), b""):
+            dst.write(chunk)
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _capture_datetime_from_timestamp_base(timestamp_base):
+    if not timestamp_base:
+        return ""
+    try:
+        dt = datetime.strptime(timestamp_base, "%Y-%m-%d %H.%M.%S")
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return ""
 
 
 def run_first_pass(
@@ -57,7 +92,9 @@ def run_first_pass(
     start_time = time.time()
     processed_size_bytes = 0
     monthly_media_map = {}
-    q.put(("status", f"First Pass | safe collection and dup-skip: 0 / {total_files} (0.0%)"))
+    manifest_seed_records = {}
+    txn_seq = 0
+    q.put(("status", f"First Pass | safe collection and dup-skip: 0 / {total_files}"))
 
     for i, file_path in enumerate(files):
         if stop_event.is_set():
@@ -76,8 +113,12 @@ def run_first_pass(
         try:
             ext = file_path.suffix.lower()
             stem = file_path.stem
+            src_capture_meta = get_capture_meta(file_path)
+            capture_subsec_ms = str(src_capture_meta.get("subsec_ms") or "000").zfill(3)[:3]
+            capture_serial = src_capture_meta.get("serial", PLACEHOLDER)
+            capture_datetime_original = ""
+            source_meta_source = "mtime"
 
-            # 讀取相機型號同時攔截插件訊息
             if performance_mode:
                 camera_model = get_camera_model(file_path)
             else:
@@ -91,21 +132,37 @@ def run_first_pass(
             if timestamp_base:
                 year, month = timestamp_base[:4], timestamp_base[5:7]
                 target_name = f"{clean_stem}{ext}"
+                capture_datetime_original = _capture_datetime_from_timestamp_base(timestamp_base)
+                source_meta_source = "filename"
             else:
                 if organize_by_time or normalize_name:
                     if performance_mode:
-                        media_date = get_media_date(file_path)
+                        media_date, source_meta_source = get_media_date_with_source(file_path)
                     else:
                         with PluginWarningCapturer() as capturer:
-                            media_date = get_media_date(file_path)
+                            media_date, source_meta_source = get_media_date_with_source(file_path)
                         captured_warnings.extend(capturer.get_messages())
 
                     year = media_date.strftime("%Y")
                     month = media_date.strftime("%m")
-                    target_name = f"{media_date.strftime('%Y-%m-%d %H.%M.%S')}{ext}" if normalize_name else f"{clean_stem}{ext}"
+                    target_name = (
+                        f"{media_date.strftime('%Y-%m-%d %H.%M.%S')}{ext}"
+                        if normalize_name
+                        else f"{clean_stem}{ext}"
+                    )
+                    capture_datetime_original = media_date.strftime("%Y-%m-%d %H:%M:%S")
                 else:
                     year, month = None, None
                     target_name = f"{clean_stem}{ext}"
+                    source_meta_source = "mtime"
+                    capture_datetime_original = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+
+            if not capture_datetime_original:
+                capture_datetime_original = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
 
             if organize_by_time:
                 month_key = f"{year}_{month}"
@@ -160,10 +217,9 @@ def run_first_pass(
                         target_file = candidate_path_for(target_dir, target_file.stem, ext)
                         effective_category = "candidate" if category == "standard" else category
                 elif overwrite_photo_mode and decision == "BURST":
-                    src_meta = get_capture_meta(file_path)
                     tgt_meta = get_capture_meta(target_file)
                     base_stem = timestamp_base or target_file.stem
-                    src_ms = src_meta.get("subsec_ms")
+                    src_ms = src_capture_meta.get("subsec_ms")
                     tgt_ms = tgt_meta.get("subsec_ms")
 
                     if tgt_ms and target_file.stem == base_stem:
@@ -217,14 +273,33 @@ def run_first_pass(
 
             max_retries = 5
             for attempt in range(max_retries):
+                tx_id = None
+                part_file = None
                 try:
-                    shutil.copy2(file_path, target_file)
+                    txn_seq += 1
+                    tx_id = f"{int(time.time() * 1000)}_{txn_seq:08d}"
+                    part_file = target_file.with_name(f".{target_file.name}.part.{txn_seq}")
+
+                    begin_manifest_transaction(
+                        dest_path=dest_path,
+                        tx_id=tx_id,
+                        src_path=file_path,
+                        target_path=target_file,
+                        part_path=part_file,
+                    )
+
+                    sha256_value = _stream_copy_with_hash(file_path, part_file)
+                    shutil.copystat(file_path, part_file)
+                    os.replace(part_file, target_file)
                     invalidate_capture_meta(target_file)
 
-                    log_path = target_dir / "_process_log.txt"
+                    commit_manifest_transaction(
+                        dest_path=dest_path,
+                        tx_id=tx_id,
+                        sha256_value=sha256_value,
+                        size_bytes=file_size,
+                    )
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    with open(log_path, "a", encoding="utf-8") as log_f:
-                        log_f.write(f"[{timestamp}] Processed: {file_path.name} -> {target_file.name}\n")
 
                     if organize_by_time:
                         rel_p = target_file.relative_to(dest_path).as_posix()
@@ -260,11 +335,30 @@ def run_first_pass(
                         q.put(("log", f"[{timestamp}] Processed: {file_path.name} -> {target_file.name}"))
 
                     if not performance_mode and plugin_msg_str != "-":
-                        q.put(("log", f"⚠️ [PLUGIN] {file_path.name}: {plugin_msg_str}"))
+                        q.put(("log", f"[PLUGIN] {file_path.name}: {plugin_msg_str}"))
+
+                    manifest_seed_records[_norm_abs(target_file)] = {
+                        "sha256": sha256_value,
+                        "capture_datetime_original": capture_datetime_original,
+                        "capture_subsec_ms": capture_subsec_ms,
+                        "orig_name_first_seen": file_path.name,
+                        "camera_model": camera_model,
+                        "serial": capture_serial,
+                        "meta_source": source_meta_source,
+                        "filesize": file_size,
+                        "mtime_iso": datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(timespec="seconds"),
+                    }
 
                     success_count += 1
                     break
                 except (PermissionError, OSError) as e:
+                    if tx_id:
+                        fail_manifest_transaction(dest_path=dest_path, tx_id=tx_id, reason=str(e))
+                    if part_file and part_file.exists():
+                        try:
+                            part_file.unlink()
+                        except Exception:
+                            pass
                     if attempt < max_retries - 1:
                         time.sleep(0.5)
                     else:
@@ -300,14 +394,22 @@ def run_first_pass(
             (
                 "status",
                 f"First Pass | safe collection and duplicate-skip: {i + 1} / {total_files} "
-                f"({(i + 1) / total_files:.1%}) | elapsed {format_time(phase_elapsed)} | "
+                f"| elapsed {format_time(phase_elapsed)} | "
                 f"phase remaining {format_time(remaining)} | overall ETA {format_time(overall_remaining)} | "
                 f"{display_file_path}",
             )
         )
         q.put(("metrics", processed_size_bytes))
 
-    return success_count, skipped_count, failed_count, start_time, processed_size_bytes, monthly_media_map
+    return (
+        success_count,
+        skipped_count,
+        failed_count,
+        start_time,
+        processed_size_bytes,
+        monthly_media_map,
+        manifest_seed_records,
+    )
 
 
 __all__ = ["run_first_pass"]

@@ -43,7 +43,7 @@ def collect_source_files(
 
             display_path = format_display_path(dirpath)
             display_path = display_path if len(display_path) <= 65 else "..." + display_path[-62:]
-            q.put(("status", f"🔍 Scanning directory: {display_path}"))
+            q.put(("status", f"Scanning directory: {display_path}"))
 
             for filename in filenames:
                 if is_kairos_self_file(filename):

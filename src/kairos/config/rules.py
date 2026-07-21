@@ -14,7 +14,7 @@ def is_kairos_self_file(filename):
     """Return True for Kairos-generated files that should be ignored during scans."""
     if filename.endswith("_media_report.html") or filename == "_index.html":
         return True
-    system_prefixes = ("_manifest_", "_process_log.txt", "_kairos_")
+    system_prefixes = ("_manifest_", "_kairos_")
     return filename.startswith(system_prefixes)
 
 __all__ = [

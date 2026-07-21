@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import html
+import json
 import urllib.parse
 from pathlib import Path
 from datetime import datetime
@@ -53,9 +54,9 @@ def generate_html_report(output_root_dir, month_key, media_records):
         else:
             if category == "video":
                 detector = f'<video src="{rel_path_encoded}" style="display:none;" onerror="{error_script}"></video>'
-                img_tag = f'<div class="video-placeholder">🎬 影片檔案<br><small>{escaped_fname}</small><br><span style="font-size:11px; color:#3498DB;">[點擊播放]</span></div>{detector}{error_div}'
+                img_tag = f'<div class="video-placeholder">影片檔案<br><small>{escaped_fname}</small><br><span style="font-size:11px; color:#3498DB;">[點擊播放]</span></div>{detector}{error_div}'
             elif category == "raw":
-                img_tag = f'<div class="raw-placeholder">📸 RAW 原檔<br><small>{escaped_fname}</small></div>{error_div}'
+                img_tag = f'<div class="raw-placeholder">RAW 原檔<br><small>{escaped_fname}</small></div>{error_div}'
             else:
                 img_tag = f'<div class="raw-placeholder">{escaped_fname}</div>{error_div}'
 
@@ -65,12 +66,14 @@ def generate_html_report(output_root_dir, month_key, media_records):
         geo_html = ""
         if loc_name != "-" or map_url != "-":
             loc_display = html.escape(loc_name, quote=True) if loc_name != "-" else "未知位置"
-            map_link_html = f'<a href="{map_url}" target="_blank" class="geo-map-btn" onclick="event.stopPropagation();" title="View on Google Maps">🌏️</a>' if map_url != "-" else ""
-            geo_html = f'<div class="geo-bar"><span class="geo-text" title="{loc_display}">📍 {loc_display}</span>{map_link_html}</div>'
+            map_link_html = f'<a href="{map_url}" target="_blank" class="geo-map-btn" onclick="event.stopPropagation();" title="View on Google Maps">MAP</a>' if map_url != "-" else ""
+            geo_html = f'<div class="geo-bar"><span class="geo-text" title="{loc_display}">{loc_display}</span>{map_link_html}</div>'
 
         # data-filepath 嚴格保留未轉碼之原始相對路徑，供 Windows/macOS 終端機刪除語法使用
+        linked_raw_json = html.escape(json.dumps(rec.get("linked_raw_paths", []), ensure_ascii=False), quote=True)
+        bundle_id = html.escape(str(rec.get("bundle_id", "")), quote=True)
         card = f"""
-        <div class="media-card" data-category="{category}" data-name="{html.escape(fname.lower(), quote=True)}" data-group="{html.escape(group_key.lower(), quote=True)}" data-group-order="{group_order}" data-size="{rec['size']}" data-url="{rel_path_encoded}" data-filepath="{html.escape(str(Path(output_root_dir) / rel_path), quote=True)}" data-display-name="{escaped_fname}">
+        <div class="media-card" data-category="{category}" data-name="{html.escape(fname.lower(), quote=True)}" data-group="{html.escape(group_key.lower(), quote=True)}" data-group-order="{group_order}" data-size="{rec['size']}" data-url="{rel_path_encoded}" data-filepath="{html.escape(str(Path(output_root_dir) / rel_path), quote=True)}" data-display-name="{escaped_fname}" data-bundle-id="{bundle_id}" data-linked-raw="{linked_raw_json}">
             <div class="img-container" onclick="openLightbox(this)" style="cursor: pointer;" title="點擊開啟全螢幕極限滿版瀏覽 / 影片串流">
                 {img_tag}
             </div>
@@ -81,7 +84,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
                     <span class="badge" style="{badge_style}">{display_label}</span>
                     <span class="size">{fsize}</span>
                 </div>
-                <button class="card-del-btn" onclick="toggleCardDelete(this); event.stopPropagation();" title="標記/取消標記為待刪除">🗑️ 標記刪除</button>
+                <button class="card-del-btn" onclick="toggleCardDelete(this); event.stopPropagation();" title="標記/取消標記為待刪除">標記刪除</button>
             </div>
         </div>
         """
@@ -151,15 +154,15 @@ def generate_html_report(output_root_dir, month_key, media_records):
 <body>
     <header>
         <h1>
-            <span>📁 {month_title} <span class="generated-time">(Generated : {generated_ts})</span></span>
+            <span>{month_title} <span class="generated-time">(Generated : {generated_ts})</span></span>
             <span style="font-size: 15px; font-weight: normal; color:#7F8C8D;">總共收錄: <strong>{len(media_records)}</strong> 個檔案</span>
         </h1>
         <div class="delete-bar" id="deleteBar">
-            <span id="deleteCountText">🗑️ 已標記 0 個待刪除檔案</span>
+            <span id="deleteCountText">已標記 0 個待刪除檔案</span>
             <div class="delete-btns">
-                <button class="btn-copy" onclick="copyDeleteCommands('win')" title="直接複製 del /f /q 指令，於 CMD 貼上即可刪除">📋 Windows CMD 刪除指令</button>
-                <button class="btn-copy" style="background:#5B4B8A;" onclick="copyDeleteCommands('powershell')" title="直接複製 Remove-Item 指令，於 Windows PowerShell 貼上即可刪除">📋 Windows PowerShell 刪除指令</button>
-                <button class="btn-copy" style="background:#2980B9;" onclick="copyDeleteCommands('mac')" title="直接複製 rm -f 指令，於 macOS 終端機貼上即可刪除">📋 複製 macOS/Linux 刪除指令</button>
+                <button class="btn-copy" onclick="copyDeleteCommands('win')" title="直接複製 del /f /q 指令，於 CMD 貼上即可刪除">Windows CMD 刪除指令</button>
+                <button class="btn-copy" style="background:#5B4B8A;" onclick="copyDeleteCommands('powershell')" title="直接複製 Remove-Item 指令，於 Windows PowerShell 貼上即可刪除">Windows PowerShell 刪除指令</button>
+                <button class="btn-copy" style="background:#2980B9;" onclick="copyDeleteCommands('mac')" title="直接複製 rm -f 指令，於 macOS 終端機貼上即可刪除">複製 macOS/Linux 刪除指令</button>
             </div>
         </div>
         <div class="controls">
@@ -171,10 +174,10 @@ def generate_html_report(output_root_dir, month_key, media_records):
             </div>
             <span style="margin-left:auto;">排序方式:</span>
             <select id="sortSelect" onchange="sortGrid()">
-                <option value="name-asc">檔名 (A ➔ Z)</option>
-                <option value="name-desc">檔名 (Z ➔ A)</option>
-                <option value="size-desc">大小 (大 ➔ 小)</option>
-                <option value="size-asc">大小 (小 ➔ 大)</option>
+                <option value="name-asc">檔名 (A -> Z)</option>
+                <option value="name-desc">檔名 (Z -> A)</option>
+                <option value="size-desc">大小 (大 -> 小)</option>
+                <option value="size-asc">大小 (小 -> 大)</option>
             </select>
         </div>
     </header>
@@ -195,7 +198,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
         <video id="lightbox-video" class="lightbox-content" controls style="display:none; background:#000;" onclick="event.stopPropagation();"></video>
         <div id="lightbox-msg" class="lightbox-msg" style="display:none;"></div>
         <div class="lightbox-bottom-bar">
-            <button id="lightbox-del-btn" class="lightbox-del-btn" onclick="toggleLightboxDelete(event)" title="快速鍵: Delete / Backspace">🗑️ 標記為刪除</button>
+            <button id="lightbox-del-btn" class="lightbox-del-btn" onclick="toggleLightboxDelete(event)" title="快速鍵: Delete / Backspace">標記為刪除</button>
         </div>
     </div>
 
@@ -271,7 +274,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
         function toggleCardDelete(btn) {{
             let card = btn.closest(".media-card");
             card.classList.toggle("marked-delete");
-            btn.innerText = card.classList.contains("marked-delete") ? "✓ 已標記刪除" : "🗑️ 標記刪除";
+            btn.innerText = card.classList.contains("marked-delete") ? "已標記刪除" : "標記刪除";
             updateDeleteUI();
         }}
 
@@ -281,7 +284,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
             if (!card) return;
             card.classList.toggle("marked-delete");
             let btn = card.querySelector(".card-del-btn");
-            if (btn) btn.innerText = card.classList.contains("marked-delete") ? "✓ 已標記刪除" : "🗑️ 標記刪除";
+            if (btn) btn.innerText = card.classList.contains("marked-delete") ? "已標記刪除" : "標記刪除";
             updateDeleteUI();
             updateLightboxDeleteBtn();
         }}
@@ -291,10 +294,10 @@ def generate_html_report(output_root_dir, month_key, media_records):
             let card = currentVisibleCards[currentIndex];
             if (card && card.classList.contains("marked-delete")) {{
                 lbDelBtn.classList.add("marked");
-                lbDelBtn.innerText = "✓ 已標記為刪除 (點此或按 Delete 取消)";
+                lbDelBtn.innerText = "已標記為刪除 (點此或按 Delete 取消)";
             }} else {{
                 lbDelBtn.classList.remove("marked");
-                lbDelBtn.innerText = "🗑️ 標記為刪除 (點此或按 Delete)";
+                lbDelBtn.innerText = "標記為刪除 (點此或按 Delete)";
             }}
         }}
 
@@ -304,7 +307,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
             let txt = document.getElementById("deleteCountText");
             if (markedCards.length > 0) {{
                 bar.style.display = "flex";
-                txt.innerText = `🗑️ 已標記 ${{markedCards.length}} 個待刪除檔案`;
+                txt.innerText = `已標記 ${{markedCards.length}} 個待刪除檔案`;
             }} else {{
                 bar.style.display = "none";
             }}
@@ -314,31 +317,65 @@ def generate_html_report(output_root_dir, month_key, media_records):
             return "'" + path.replace(/'/g, "'\\"'\\"'") + "'";
         }}
 
+        function parseLinkedRaw(card) {{
+            const raw = card.dataset.linkedRaw || "[]";
+            try {{
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            }} catch (e) {{
+                return [];
+            }}
+        }}
+
+        function collectDeleteTargets(markedCards) {{
+            const targets = new Set();
+            let hasLinkedRaw = false;
+            markedCards.forEach(card => {{
+                const primaryPath = card.dataset.filepath || card.dataset.url;
+                if (primaryPath) targets.add(primaryPath);
+                const linkedRawPaths = parseLinkedRaw(card);
+                if (linkedRawPaths.length > 0) {{
+                    hasLinkedRaw = true;
+                    linkedRawPaths.forEach(path => {{
+                        if (path) targets.add(path);
+                    }});
+                }}
+            }});
+            return {{ targets: Array.from(targets), hasLinkedRaw }};
+        }}
+
         function copyDeleteCommands(type) {{
             let markedCards = document.querySelectorAll(".media-card.marked-delete");
             if (markedCards.length === 0) return;
+            const {{ targets, hasLinkedRaw }} = collectDeleteTargets(markedCards);
+            if (targets.length === 0) return;
+
+            if (hasLinkedRaw) {{
+                const shouldContinue = confirm("系統偵測到關聯的 RAW 原始檔，將連同標記的 JPG 一併加入刪除指令。確定要繼續嗎？");
+                if (!shouldContinue) return;
+            }}
 
             let content = "";
             if (type === 'win') {{
-                markedCards.forEach(c => {{
-                    let relPath = (c.dataset.filepath || c.dataset.url).replace(/\\//g, '\\\\');
+                targets.forEach(path => {{
+                    let relPath = String(path).replace(/\\//g, '\\\\');
                     content += `del /f /q "${{relPath}}"\\r\\n`;
                 }});
             }} else if (type === 'powershell') {{
-                markedCards.forEach(c => {{
-                    let relPath = (c.dataset.filepath || c.dataset.url).replace(/\\//g, '\\\\');
+                targets.forEach(path => {{
+                    let relPath = String(path).replace(/\\//g, '\\\\');
                     let literalPath = relPath.replace(/'/g, "''");
                     content += `Remove-Item -LiteralPath '${{literalPath}}' -Force\\r\\n`;
                 }});
             }} else {{
-                markedCards.forEach(c => {{
-                    let relPath = c.dataset.filepath || c.dataset.url;
+                targets.forEach(path => {{
+                    let relPath = String(path);
                     content += `rm -f ${{quotePosixShell(relPath)}}\\n`;
                 }});
             }}
 
             navigator.clipboard.writeText(content).then(() => {{
-                alert(`✅ 已成功複製 ${{markedCards.length}} 筆刪除指令到剪貼簿！\\n\\n請在輸出根目錄開啟對應的 CMD、Windows PowerShell 或 macOS/Linux 終端機，再貼上執行。`);
+                alert(`已成功複製 ${{targets.length}} 筆刪除指令到剪貼簿！\\n\\n請在輸出根目錄開啟對應的 CMD、Windows PowerShell 或 macOS/Linux 終端機，再貼上執行。`);
             }}).catch(err => {{
                 alert("無法自動寫入剪貼簿，請改為點擊右方下載按鈕保存腳本。");
             }});
@@ -395,7 +432,7 @@ def generate_html_report(output_root_dir, month_key, media_records):
                 lbImg.style.display = "none";
                 lbVid.style.display = "none";
                 lbMsg.style.display = "block";
-                lbMsg.innerHTML = `📸 RAW 原檔不支援瀏覽器線上大圖預覽<br><br><a href="${{imgUrl}}" target="_blank" style="color: #F39C12; text-decoration: underline; font-weight:bold;">點此下載 / 新分頁開啟原始檔 (${{name}})</a>`;
+                lbMsg.innerHTML = `RAW 原檔不支援瀏覽器線上大圖預覽<br><br><a href="${{imgUrl}}" target="_blank" style="color: #F39C12; text-decoration: underline; font-weight:bold;">點此下載 / 新分頁開啟原始檔 (${{name}})</a>`;
             }} else {{
                 lbVid.style.display = "none";
                 lbMsg.style.display = "none";

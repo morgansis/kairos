@@ -11,6 +11,7 @@ import threading
 import subprocess
 import configparser
 import tkinter as tk
+from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox
 
@@ -18,6 +19,7 @@ import customtkinter as ctk
 
 try:
     from ..config.constants import *  # noqa: F401,F403
+    from ..core.consistency import threaded_verify_consistency
     from ..core.pipeline import threaded_process_images
     from ..metadata.exif_parser import EXIFREAD_AVAILABLE, PIL_AVAILABLE
     from ..metadata.geo_engine import RG_AVAILABLE
@@ -33,6 +35,7 @@ try:
     )
 except ImportError:  # pragma: no cover - direct script execution fallback
     from config.constants import *  # noqa: F401,F403
+    from core.consistency import threaded_verify_consistency
     from core.pipeline import threaded_process_images
     from metadata.exif_parser import EXIFREAD_AVAILABLE, PIL_AVAILABLE
     from metadata.geo_engine import RG_AVAILABLE
@@ -92,7 +95,7 @@ def open_folder(path_var, selected_paths=None):
         else:
             # 邏輯三：不屬於同一個 parent (可能人為修改過 .ini)，彈窗提示衝突
             messagebox.showwarning(
-                "❌ 路徑衝突",
+                "路徑衝突",
                 "偵測到目前的來源包含多個資料夾，且「不屬於」同一個母目錄！\n\n"
                 "設定檔 (.ini) 可能曾經被手動編輯過，或是輸入了跨路徑的子目錄，系統無法判定欲開啟哪一個外層目錄。"
             )
@@ -108,9 +111,9 @@ def open_folder(path_var, selected_paths=None):
             else:
                 subprocess.Popen(["xdg-open", target_path])
         except Exception as e:
-            messagebox.showerror("錯誤", f"❌ 無法開啟資料夾: {e}")
+            messagebox.showerror("錯誤", f"無法開啟資料夾: {e}")
     else:
-        messagebox.showwarning("警告", f"⚠️ 資料夾不存在: {target_path}")
+        messagebox.showwarning("警告", f"資料夾不存在: {target_path}")
 
 def sigint_handler(sig, frame):
     print("\n[系統] 接收到 Ctrl+C 中斷指令，正在安全停止背景執行緒並離開程式...")
@@ -150,6 +153,9 @@ class ImageOrganizerAppModern:
         self.selected_src_folders = []
         self.start_time = 0
         self.processed_bytes = 0
+        self.run_seq = 0
+        self.active_run_seq = None
+        self.active_run_action = ""
 
         title_font = ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_TITLE_FONT_SIZE, weight="bold")
         app_font = ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_APP_FONT_SIZE)
@@ -157,13 +163,13 @@ class ImageOrganizerAppModern:
 
         self.src_var = tk.StringVar()
         self.dest_var = tk.StringVar()
-        self.organize_by_time_var = tk.BooleanVar(value=True)    # ☑ 依照時間分資料夾
-        self.normalize_name_var = tk.BooleanVar(value=True)      # ☑ 檔名正規化
-        self.enable_geo_lookup_var = tk.BooleanVar(value=False)  # ☐ 預設關閉地理位置解析以提升速度
-        self.copy_video_var = tk.BooleanVar(value=True)          # ☑ 掃描包含 VIDEO 檔
-        self.copy_raw_var = tk.BooleanVar(value=False)           # ☐ 掃描包含 RAW 檔
-        self.overwrite_var = tk.BooleanVar(value=False)          # ☐ 強制覆蓋 (連拍保護 & 留新不留舊)
-        self.performance_mode_var = tk.BooleanVar(value=False)   # ☐ 效能模式：精簡 LOG / 快速掃描 / GEO 失敗摘要
+        self.organize_by_time_var = tk.BooleanVar(value=True)    # 依照時間分資料夾
+        self.normalize_name_var = tk.BooleanVar(value=True)      # 檔名正規化
+        self.enable_geo_lookup_var = tk.BooleanVar(value=False)  # 預設關閉地理位置解析以提升速度
+        self.copy_video_var = tk.BooleanVar(value=True)          # 掃描包含 VIDEO 檔
+        self.copy_raw_var = tk.BooleanVar(value=False)           # 掃描包含 RAW 檔
+        self.overwrite_var = tk.BooleanVar(value=False)          # 強制覆蓋 (連拍保護 & 留新不留舊)
+        self.performance_mode_var = tk.BooleanVar(value=False)   # 效能模式：精簡 LOG / 快速掃描 / GEO 失敗摘要
         self.theme_var = tk.StringVar(value=DEFAULT_THEME_NAME)
 
         self.load_config()
@@ -206,9 +212,9 @@ class ImageOrganizerAppModern:
         self.entry_src.grid(row=0, column=1, padx=(0, 10), pady=(20, 7), sticky="ew")
         btn_frame_src = ctk.CTkFrame(frame_top, fg_color="transparent")
         btn_frame_src.grid(row=0, column=2, padx=(0, 15), pady=(20, 7), sticky="w")
-        self.btn_browse_src = ctk.CTkButton(btn_frame_src, text="🔍 瀏覽", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=self.browse_src)
+        self.btn_browse_src = ctk.CTkButton(btn_frame_src, text="瀏覽", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=self.browse_src)
         self.btn_browse_src.pack(side="left", padx=(0, 10))
-        self.btn_view_src = ctk.CTkButton(btn_frame_src, text="📂 檢視", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=lambda: open_folder(self.src_var, self.selected_src_folders))
+        self.btn_view_src = ctk.CTkButton(btn_frame_src, text="檢視", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=lambda: open_folder(self.src_var, self.selected_src_folders))
         self.btn_view_src.pack(side="left")
 
         # === 輸出 ===
@@ -217,24 +223,33 @@ class ImageOrganizerAppModern:
         ctk.CTkEntry(frame_top, textvariable=self.dest_var, font=app_font, height=row_height).grid(row=1, column=1, padx=(0, 10), pady=(7, 10), sticky="ew")
         btn_frame_dest = ctk.CTkFrame(frame_top, fg_color="transparent")
         btn_frame_dest.grid(row=1, column=2, padx=(0, 15), pady=(7, 10), sticky="w")
-        self.btn_browse_dest = ctk.CTkButton(btn_frame_dest, text="🔍 瀏覽", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=self.browse_dest)
+        self.btn_browse_dest = ctk.CTkButton(btn_frame_dest, text="瀏覽", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=self.browse_dest)
         self.btn_browse_dest.pack(side="left", padx=(0, 10))
-        self.btn_view_dest = ctk.CTkButton(btn_frame_dest, text="📂 檢視", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=lambda: open_folder(self.dest_var))
+        self.btn_view_dest = ctk.CTkButton(btn_frame_dest, text="檢視", width=UI_SMALL_BTN_WIDTH, height=row_height, font=app_font, command=lambda: open_folder(self.dest_var))
         self.btn_view_dest.pack(side="left")
 
         # === 進階 ===
         self.lbl_mode = ctk.CTkLabel(frame_top, text="處理模式 (Mode):", font=app_font)
         self.lbl_mode.grid(row=2, column=0, padx=(20, 10), pady=(10, 5), sticky="e")
         mode_frame = ctk.CTkFrame(frame_top, fg_color="transparent")
-        mode_frame.grid(row=2, column=1, columnspan=2, padx=(0, 20), pady=(10, 5), sticky="w")
+        mode_frame.grid(row=2, column=1, padx=(0, 10), pady=(10, 5), sticky="w")
 
         self.norm_chk = ctk.CTkCheckBox(mode_frame, text="檔名正規化 (YYYY-MM-DD HH.MM.SS)", variable=self.normalize_name_var, font=app_font)
         self.norm_chk.pack(side="left", padx=(0, 20))
         self.time_chk = ctk.CTkCheckBox(mode_frame, text="依照年月區分資料夾 (YYYY_MM)", variable=self.organize_by_time_var, font=app_font)
         self.time_chk.pack(side="left", padx=(0, 20))
-
         self.geo_checkbox = ctk.CTkCheckBox(mode_frame, text="解析地理位置與地圖 (會耗費較多時間)", variable=self.enable_geo_lookup_var, font=app_font)
         self.geo_checkbox.pack(side="left", padx=(0, 20))
+
+        self.verify_btn = ctk.CTkButton(
+            frame_top,
+            text="檢查來源DB完整性",
+            width=UI_THEME_MENU_WIDTH,
+            height=row_height,
+            font=app_font,
+            command=self.start_consistency_check,
+        )
+        self.verify_btn.grid(row=2, column=2, padx=(0, 20), pady=(10, 5), sticky="e")
 
         self.lbl_opt = ctk.CTkLabel(frame_top, text="動作選項 (Options):", font=app_font)
         self.lbl_opt.grid(row=3, column=0, padx=(20, 10), pady=(5, 20), sticky="e")
@@ -245,14 +260,18 @@ class ImageOrganizerAppModern:
         self.vid_checkbox.pack(side="left", padx=(0, 15))
         self.raw_checkbox = ctk.CTkCheckBox(options_frame, text="掃描包含 RAW 檔", variable=self.copy_raw_var, font=app_font)
         self.raw_checkbox.pack(side="left", padx=(0, 15))
-        self.overwrite_checkbox = ctk.CTkCheckBox(options_frame, text="強制覆蓋時間戳相同的照片 (連拍保護 & 留新不留舊)", variable=self.overwrite_var, font=app_font)
+        self.overwrite_checkbox = ctk.CTkCheckBox(options_frame, text="同時間戳留較新檔（其餘移至 candidate）", variable=self.overwrite_var, font=app_font)
         self.overwrite_checkbox.pack(side="left", padx=(0, 15))
         self.performance_checkbox = ctk.CTkCheckBox(options_frame, text="效能模式 (精簡 LOG / 快速掃描 / GEO 失敗摘要)", variable=self.performance_mode_var, font=app_font)
         self.performance_checkbox.pack(side="left", padx=(0, 15))
 
+        # === 右側主題控制 ===
+        theme_row = ctk.CTkFrame(options_frame, fg_color="transparent")
+        theme_row.pack(side="right", padx=(0, 0))
+
         # === 主題選擇 ===
         self.theme_menu = ctk.CTkOptionMenu(
-            options_frame,
+            theme_row,
             values=list(THEMES.keys()),
             variable=self.theme_var,
             command=self.change_theme,
@@ -260,7 +279,7 @@ class ImageOrganizerAppModern:
             width=UI_THEME_MENU_WIDTH
         )
         self.theme_menu.pack(side="right", padx=(0, 0))
-        self.lbl_theme = ctk.CTkLabel(options_frame, text="主題配色", font=app_font)
+        self.lbl_theme = ctk.CTkLabel(theme_row, text="主題配色", font=app_font)
         self.lbl_theme.pack(side="right", padx=(0, 5))
 
         # === 狀態與進度 ===
@@ -295,7 +314,7 @@ class ImageOrganizerAppModern:
         # === 執行按鈕 ===
         frame_btn = ctk.CTkFrame(root, fg_color="transparent")
         frame_btn.pack(pady=(10, 20), padx=25, fill="x")
-        self.start_btn = ctk.CTkButton(frame_btn, text="▶ 開始執行", font=btn_font, height=UI_START_BTN_HEIGHT, corner_radius=8, command=self.toggle_processing)
+        self.start_btn = ctk.CTkButton(frame_btn, text="開始執行", font=btn_font, height=UI_START_BTN_HEIGHT, corner_radius=8, command=self.toggle_processing)
         self.start_btn.pack(expand=True, fill="x")
 
         # 套用初始主題顏色
@@ -345,6 +364,7 @@ class ImageOrganizerAppModern:
         self.btn_view_src.configure(fg_color=t["SUB"], hover_color=t["HOVER"])
         self.btn_view_dest.configure(fg_color=t["SUB"], hover_color=t["HOVER"])
         self.theme_menu.configure(fg_color=t["MAIN"], button_color=t["MAIN"], button_hover_color=t["HOVER"])
+        self.verify_btn.configure(fg_color=t["MAIN"], hover_color=t["HOVER"])
 
         for chk in [self.norm_chk, self.time_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
             chk.configure(fg_color=t["MAIN"], hover_color=t["HOVER"], text_color=t["TEXT"])
@@ -383,9 +403,6 @@ class ImageOrganizerAppModern:
                         self.src_var.set(format_display_path(saved_src))
                     self.dest_var.set(format_display_path(config.get('Settings', 'Destination', fallback='')))
                     self.organize_by_time_var.set(config.getboolean('Settings', 'OrganizeByTime', fallback=True))
-                    if not self.organize_by_time_var.get() and len(self.selected_src_folders) > 1:
-                        self.selected_src_folders = self.selected_src_folders[:1]
-                        self.src_var.set(format_display_path(self.selected_src_folders[0]))
                     self.normalize_name_var.set(config.getboolean('Settings', 'NormalizeName', fallback=True))
                     self.enable_geo_lookup_var.set(config.getboolean('Settings', 'EnableGeoLookup', fallback=False))
                     self.performance_mode_var.set(config.getboolean('Settings', 'PerformanceMode', fallback=False))
@@ -430,19 +447,101 @@ class ImageOrganizerAppModern:
             t = THEMES[self.theme_var.get()]
             FolderSelectDialog(
                 self.root, parent_dir, self.on_folders_selected, theme_colors=t,
-                allow_multiple=self.organize_by_time_var.get()
+                allow_multiple=True
             )
 
     def on_folders_selected(self, selected_paths):
-        if not self.organize_by_time_var.get() and len(selected_paths) != 1:
-            messagebox.showwarning("提示", "未啟用依年月整理時，來源與目的資料夾為 1:1，請只選擇一個來源資料夾。")
-            return
         self.selected_src_folders = selected_paths
         displayed_paths = [format_display_path(path) for path in selected_paths]
         if len(selected_paths) == 1:
             self.src_var.set(displayed_paths[0])
         else:
             self.src_var.set(f"[已勾選 {len(selected_paths)} 個資料夾] " + " ; ".join(displayed_paths))
+
+    def _append_run_log_header(self, action_label):
+        self.run_seq += 1
+        self.active_run_seq = self.run_seq
+        self.active_run_action = str(action_label)
+        run_id = f"RUN #{self.active_run_seq}"
+        started_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        src_count = len(self.selected_src_folders)
+        src_preview_list = [format_display_path(path) for path in self.selected_src_folders[:2]]
+        src_preview = " ; ".join(src_preview_list) if src_preview_list else "-"
+        if src_count > 2:
+            src_preview += f" ; ... (+{src_count - 2})"
+        dest_raw = self.dest_var.get().strip(' "\'')
+        dest_preview = format_display_path(dest_raw) if dest_raw else "-"
+        divider = "=" * 94
+
+        lines = [
+            "",
+            divider,
+            f"[{run_id}] {action_label}",
+            f"[{run_id}] START: {started_at}",
+            f"[{run_id}] SOURCE: {src_count} folder(s) | {src_preview}",
+            f"[{run_id}] OUTPUT: {dest_preview}",
+            divider,
+        ]
+
+        self._append_log_lines(lines)
+
+    def _append_run_log_footer(self, interrupted=False, elapsed_seconds=0.0):
+        if self.active_run_seq is None:
+            return
+        run_id = f"RUN #{self.active_run_seq}"
+        ended_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        status = "INTERRUPTED" if interrupted else "COMPLETED"
+        elapsed = format_time(elapsed_seconds) if elapsed_seconds and elapsed_seconds > 0 else "00:00"
+        self._append_log_lines([f"[{run_id}] END: {ended_at} | STATUS: {status} | ELAPSED: {elapsed}"])
+        self.active_run_seq = None
+        self.active_run_action = ""
+
+    def _append_log_lines(self, lines):
+        self.log_textbox.configure(state="normal")
+        for line in lines:
+            self.log_textbox.insert("end", f"{line}\n")
+        while int(self.log_textbox.index("end-1c").split(".")[0]) > 1000:
+            self.log_textbox.delete("1.0", "2.0")
+        self.log_textbox.see("end")
+        self.log_textbox.configure(state="disabled")
+
+    def _normalize_log_message(self, message, kind="log"):
+        text = str(message or "").strip()
+        if not text:
+            return ""
+
+        if text.startswith("[GEO_CACHE]"):
+            text = "[GEO]" + text[len("[GEO_CACHE]"):]
+
+        if text.startswith("Global offline geo database loaded and index warmed up."):
+            text = "[GEO] Global offline geo database loaded and index warmed up."
+        elif text.startswith("GEO stats |"):
+            text = "[GEO] " + text
+        elif text.startswith("CSV report exported:"):
+            text = "[SUMMARY] " + text
+        elif text.startswith("HTML report exported:"):
+            text = "[SUMMARY] " + text
+        elif text.startswith("[MANIFEST] Transaction recovery | "):
+            text = text.replace("[MANIFEST] Transaction recovery | ", "[MANIFEST][RECOVERY] ", 1)
+        elif text.startswith("[MANIFEST] Loaded historical manifests: "):
+            text = text.replace("[MANIFEST] Loaded historical manifests: ", "[MANIFEST][INDEX] manifests_loaded=", 1)
+            text = text.replace(" files | ", " | ", 1)
+        elif text.startswith("[MANIFEST] Rebuilt per-folder manifests: "):
+            text = text.replace("[MANIFEST] Rebuilt per-folder manifests: ", "[MANIFEST][REBUILD] manifests_written=", 1)
+            text = text.replace(" files | ", " | ", 1)
+        elif text.startswith("[GEO] 成功繼承歷史地理快取:"):
+            text = text.replace("[GEO] 成功繼承歷史地理快取:", "[GEO] Loaded geo cache:", 1)
+        elif text.startswith("[GEO] 讀取快取失敗"):
+            text = text.replace("[GEO] 讀取快取失敗", "[GEO][ERROR] Failed to read cache", 1)
+        elif text.startswith("[GEO] 空間位置字典已成功封存至:"):
+            text = text.replace("[GEO] 空間位置字典已成功封存至:", "[GEO] Saved geo cache:", 1)
+        elif text.startswith("[GEO] 封存快取失敗:"):
+            text = text.replace("[GEO] 封存快取失敗:", "[GEO][ERROR] Failed to save cache:", 1)
+
+        if kind == "error" and not text.startswith("["):
+            text = f"[ERROR] {text}"
+
+        return text
 
     def browse_dest(self):
         current_path = self.dest_var.get().strip(' "\'')
@@ -458,16 +557,13 @@ class ImageOrganizerAppModern:
                 data = msg[1]
                 if msg_type == 'status': self.status_label.configure(text=data)
                 elif msg_type == 'log':
-                    self.log_textbox.configure(state="normal")
-                    self.log_textbox.insert("end", data + "\n")
-                    if int(self.log_textbox.index("end-1c").split('.')[0]) > 1000: self.log_textbox.delete("1.0", "2.0")
-                    self.log_textbox.see("end")
-                    self.log_textbox.configure(state="disabled")
+                    formatted = self._normalize_log_message(data, kind="log")
+                    if formatted:
+                        self._append_log_lines([formatted])
                 elif msg_type == 'error_log':
-                    self.log_textbox.configure(state="normal")
-                    self.log_textbox.insert("end", f"[ERROR] {data}\n")
-                    self.log_textbox.see("end")
-                    self.log_textbox.configure(state="disabled")
+                    formatted = self._normalize_log_message(data, kind="error")
+                    if formatted:
+                        self._append_log_lines([formatted])
                 elif msg_type == 'progress':
                     self.progress_bar.set(data)
                     self.progress_pct_label.configure(text=f"{int(data * 100)}%")
@@ -504,6 +600,7 @@ class ImageOrganizerAppModern:
         self.processing = False
 
         # 1. 在停止計時前，計算並「定格」最後的總耗時與平均速度在畫面上
+        final_elapsed = 0.0
         if self.start_time > 0:
             final_elapsed = time.time() - self.start_time
             speed = self.processed_bytes / final_elapsed if final_elapsed > 0 else 0
@@ -513,27 +610,70 @@ class ImageOrganizerAppModern:
         self.start_time = 0  # 讓 update_timer 停止循環
 
         # 2. 判斷是順利完成還是被中斷，呈現對應的最終狀態
-        if self.stop_event.is_set():
-            self.status_label.configure(text="🛑 處理已中斷")
+        was_interrupted = self.stop_event.is_set()
+        if was_interrupted:
+            self.status_label.configure(text="處理已中斷")
         else:
-            self.status_label.configure(text="✅ 處理完畢！可於下方日誌檢視細節或點擊彈窗開啟報告")
+            self.status_label.configure(text="處理完畢！可於下方日誌檢視細節或點擊彈窗開啟報告")
             self.progress_bar.set(1.0)
             self.progress_pct_label.configure(text="100%")
 
+        self._append_run_log_footer(interrupted=was_interrupted, elapsed_seconds=final_elapsed)
         self.stop_event.clear()
 
         # 3. 恢復介面按鈕與核取方塊的互動功能 (維持原樣)
         t = THEMES[self.theme_var.get()]
-        self.start_btn.configure(state='normal', text="▶ 開始執行", fg_color=t["MAIN"], hover_color=t["HOVER"])
+        self.start_btn.configure(state='normal', text="開始執行", fg_color=t["MAIN"], hover_color=t["HOVER"])
         for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
             chk.configure(state='normal')
         self.theme_menu.configure(state='normal')
         self.btn_browse_src.configure(state='normal')
+        self.verify_btn.configure(state='normal')
+
+    def start_consistency_check(self):
+        if self.processing:
+            self.stop_event.set()
+            self.start_btn.configure(text="正在中斷並等待當前檔案完成...", state='disabled')
+            return
+
+        if not self.selected_src_folders:
+            messagebox.showwarning("警告", "請先使用瀏覽按鈕選取來源目錄！")
+            return
+
+        self._append_run_log_header("Consistency Check (Read-Only)")
+        self.save_config()
+        self.processing = True
+        self.stop_event.clear()
+
+        t = THEMES[self.theme_var.get()]
+        self.start_btn.configure(text="停止處理", fg_color=t["STOP"], hover_color=t["HOVER"])
+        for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
+            chk.configure(state='disabled')
+        self.theme_menu.configure(state='disabled')
+        self.btn_browse_src.configure(state='disabled')
+        self.verify_btn.configure(state='disabled')
+
+        self.status_label.configure(text="一致性檢查模式：準備中...")
+        self.metrics_label.configure(text="耗時: 00:00 | 已掃: 0 B | 速度: 0 B/s")
+        self.progress_bar.configure(mode="determinate")
+        self.progress_bar.set(0)
+        self.progress_pct_label.configure(text="0%")
+        self.start_time = time.time()
+        self.processed_bytes = 0
+        self.update_timer()
+
+        self.thread = threading.Thread(
+            target=threaded_verify_consistency,
+            args=(self.selected_src_folders, self.queue, self.stop_event),
+            daemon=True
+        )
+        self.thread.start()
+        self.root.after(100, self.check_queue)
 
     def toggle_processing(self):
         if self.processing:
             self.stop_event.set()
-            self.start_btn.configure(text="⏳ 正在中斷並等待當前檔案完成...", state='disabled')
+            self.start_btn.configure(text="正在中斷並等待當前檔案完成...", state='disabled')
             return
 
         dest = self.dest_var.get().strip(' "\'')
@@ -541,7 +681,7 @@ class ImageOrganizerAppModern:
             messagebox.showwarning("警告", "請先使用瀏覽按鈕選取來源目錄！")
             return
 
-        if not self.organize_by_time_var.get() and len(self.selected_src_folders) != 1:
+        if (not self.organize_by_time_var.get()) and len(self.selected_src_folders) != 1:
             messagebox.showwarning("警告", "未啟用依年月整理時，來源與目的資料夾為 1:1，請只保留一個來源資料夾。")
             return
 
@@ -582,16 +722,18 @@ class ImageOrganizerAppModern:
                     return
         except Exception: pass
 
+        self._append_run_log_header("Media Organizing Pipeline")
         self.save_config()
         self.processing = True
         self.stop_event.clear()
 
         t = THEMES[self.theme_var.get()]
-        self.start_btn.configure(text="🛑 停止處理", fg_color=t["STOP"], hover_color=t["HOVER"])
+        self.start_btn.configure(text="停止處理", fg_color=t["STOP"], hover_color=t["HOVER"])
         for chk in [self.time_chk, self.norm_chk, self.geo_checkbox, self.vid_checkbox, self.raw_checkbox, self.overwrite_checkbox, self.performance_checkbox]:
             chk.configure(state='disabled')
         self.theme_menu.configure(state='disabled')
         self.btn_browse_src.configure(state='disabled')
+        self.verify_btn.configure(state='disabled')
 
         self.status_label.configure(text="準備掃描檔案...")
         self.metrics_label.configure(text="時間: 00:00 | 大小: 0 B | 速度: 0 B/s")

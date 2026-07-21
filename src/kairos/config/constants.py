@@ -49,7 +49,7 @@ THEMES = {
 }
 
 DEFAULT_THEME_NAME = "晨霧灰藍 (沈穩)"
-VERSION = "2026-07-20"
+VERSION = "2026-07-21"
 
 # ===================== UI tuning =====================
 UI_FONT_FAMILY = "Calibri"

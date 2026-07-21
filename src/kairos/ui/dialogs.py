@@ -48,9 +48,11 @@ class ModernMessageBox(ctk.CTkToplevel):
         header_frame = ctk.CTkFrame(self, fg_color="transparent")
         header_frame.pack(fill="x", padx=20, pady=(15, 5))
 
-        icon_str = "ℹ️"
-        if level == "warning": icon_str = "⚠️"
-        elif level == "error": icon_str = "❌"
+        icon_str = "INFO"
+        if level == "warning":
+            icon_str = "WARN"
+        elif level == "error":
+            icon_str = "ERROR"
 
         ctk.CTkLabel(header_frame, text=icon_str, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_ICON)).pack(side="left", padx=(0, 10))
         ctk.CTkLabel(header_frame, text=title, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_TITLE, weight="bold"), text_color=text_color).pack(side="left")
@@ -69,14 +71,14 @@ class ModernMessageBox(ctk.CTkToplevel):
         if html_reports:
             if num_reports <= 3:
                 for m_key, h_path in html_reports:
-                    ctk.CTkButton(btn_frame, text=f"🌐 開啟 {m_key} 報告", height=UI_MSGBOX_REPORT_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_REPORT_BTN, weight="bold"),
+                    ctk.CTkButton(btn_frame, text=f"開啟 {m_key} 報告", height=UI_MSGBOX_REPORT_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_REPORT_BTN, weight="bold"),
                                   fg_color="#2980B9", hover_color="#1F618D",
                                   command=lambda p=h_path: webbrowser.open(p.as_uri())).pack(side="top", fill="x", pady=4)
             else:
                 scroll_reports = ctk.CTkScrollableFrame(btn_frame, height=UI_MSGBOX_REPORT_SCROLL_HEIGHT, fg_color="transparent")
                 scroll_reports.pack(side="top", fill="both", expand=True, pady=2)
                 for m_key, h_path in html_reports:
-                    ctk.CTkButton(scroll_reports, text=f"🌐 開啟 {m_key} 報告", height=UI_MSGBOX_REPORT_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_REPORT_BTN, weight="bold"),
+                    ctk.CTkButton(scroll_reports, text=f"開啟 {m_key} 報告", height=UI_MSGBOX_REPORT_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_MSGBOX_REPORT_BTN, weight="bold"),
                                   fg_color="#2980B9", hover_color="#1F618D",
                                   command=lambda p=h_path: webbrowser.open(p.as_uri())).pack(side="top", fill="x", pady=4, padx=2)
 
@@ -121,13 +123,13 @@ class FolderSelectDialog(ctk.CTkToplevel):
 
         top_frame = ctk.CTkFrame(self, fg_color="transparent")
         top_frame.pack(fill="x", padx=20, pady=(15, 5))
-        ctk.CTkLabel(top_frame, text=f"📂 目前位置: {format_display_path(initial_dir)}", font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_TITLE, weight="bold"), text_color=text_color).pack(side="left")
+        ctk.CTkLabel(top_frame, text=f"目前位置: {format_display_path(initial_dir)}", font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_TITLE, weight="bold"), text_color=text_color).pack(side="left")
 
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(fill="x", padx=20, pady=8)
         if self.allow_multiple:
-            ctk.CTkButton(btn_frame, text="✅ 全選", width=UI_FOLDER_ACTION_BTN_WIDTH, height=UI_FOLDER_ACTION_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_ACTION, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.select_all).pack(side="left", padx=(0, 10))
-        ctk.CTkButton(btn_frame, text="⬜ 全不選", width=UI_FOLDER_ACTION_BTN_WIDTH, height=UI_FOLDER_ACTION_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_ACTION, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.deselect_all).pack(side="left")
+            ctk.CTkButton(btn_frame, text="全選", width=UI_FOLDER_ACTION_BTN_WIDTH, height=UI_FOLDER_ACTION_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_ACTION, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.select_all).pack(side="left", padx=(0, 10))
+        ctk.CTkButton(btn_frame, text="全不選", width=UI_FOLDER_ACTION_BTN_WIDTH, height=UI_FOLDER_ACTION_BTN_HEIGHT, font=ctk.CTkFont(size=UI_FONT_SIZE_FOLDER_ACTION, weight="bold"), fg_color=main_color, hover_color=hover_color, command=self.deselect_all).pack(side="left")
 
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#FFFFFF" if bg_color=="#F4F6F7" else "#FAFAFA")
         self.scroll_frame.pack(fill="both", expand=True, padx=20, pady=10)
@@ -147,7 +149,7 @@ class FolderSelectDialog(ctk.CTkToplevel):
                 for index, path in enumerate(subdirs):
                     var = tk.BooleanVar(value=self.allow_multiple or index == 0)
                     command = None if self.allow_multiple else lambda selected_var=var: self.select_one(selected_var)
-                    chk = ctk.CTkCheckBox(self.scroll_frame, text=f"📁 {os.path.basename(path)}", variable=var, command=command,
+                    chk = ctk.CTkCheckBox(self.scroll_frame, text=f"{os.path.basename(path)}", variable=var, command=command,
                                           font=ctk.CTkFont(family=UI_FONT_FAMILY, size=UI_FONT_SIZE_FOLDER_CHECK), fg_color=main_color, hover_color=hover_color, text_color=text_color)
                     chk.pack(anchor="w", pady=8, padx=12)
                     self.check_vars.append(var)

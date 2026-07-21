@@ -12,15 +12,15 @@ def build_summary_message(success_count, skipped_count, failed_count, report_msg
     if interrupted:
         return (
             f"中斷前已處理數量統計\n\n"
-            f"✅ PASS: {success_count}\n"
-            f"⏭️ SKIP: {skipped_count}\n"
-            f"❌ FAIL: {failed_count}{report_msg_append}"
+            f"PASS: {success_count}\n"
+            f"SKIP: {skipped_count}\n"
+            f"FAIL: {failed_count}{report_msg_append}"
         )
     return (
         f"本次處理檔案數量統計\n\n"
-        f"✅ PASS: {success_count}\n"
-        f"⏭️ SKIP: {skipped_count}\n"
-        f"❌ FAIL: {failed_count}{report_msg_append}"
+        f"PASS: {success_count}\n"
+        f"SKIP: {skipped_count}\n"
+        f"FAIL: {failed_count}{report_msg_append}"
     )
 
 

@@ -8,36 +8,163 @@ from datetime import datetime
 from collections import Counter
 
 try:
-    from ..config.constants import PLACEHOLDER
+    from ..config.constants import PLACEHOLDER, RAW_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
+    from ..config.rules import is_kairos_self_file
     from ..metadata.geo_engine import get_stats_banner_html
     from ..utils.sys_helpers import format_display_path
 except ImportError:  # pragma: no cover - direct script execution fallback
-    from config.constants import PLACEHOLDER
+    from config.constants import PLACEHOLDER, RAW_EXTENSIONS, STANDARD_EXTENSIONS, VIDEO_EXTENSIONS
+    from config.rules import is_kairos_self_file
     from metadata.geo_engine import get_stats_banner_html
     from utils.sys_helpers import format_display_path
 
+NO_EXT = "[無副檔名]"
+EXT_CATEGORY_LABELS = {
+    "photo": "照片",
+    "video": "影片",
+    "raw": "RAW",
+    "other": "其他",
+}
+EXT_CATEGORY_ORDER = ("photo", "video", "raw", "other")
+EXT_CATEGORY_RANK = {name: idx for idx, name in enumerate(EXT_CATEGORY_ORDER)}
+
+
+def _normalize_ext(ext_value):
+    ext = str(ext_value or "").strip().lower()
+    return ext if ext else NO_EXT
+
+
+def _classify_ext_category(ext):
+    if ext in RAW_EXTENSIONS:
+        return "raw"
+    if ext in VIDEO_EXTENSIONS:
+        return "video"
+    if ext in STANDARD_EXTENSIONS:
+        return "photo"
+    return "other"
+
+
+def _aggregate_ext_counter_by_category(ext_counter):
+    aggregated = Counter()
+    for ext, count in ext_counter.items():
+        aggregated[_classify_ext_category(ext)] += int(count or 0)
+    return aggregated
+
+
+def _ext_sort_key(ext):
+    category = _classify_ext_category(ext)
+    return (EXT_CATEGORY_RANK.get(category, 99), ext == NO_EXT, ext)
+
+
 def destination_extension_counts(dest_path):
-    excluded = {'_index.html', '_manifest_audit.csv', '_manifest_skiplist.txt', '_manifest_filetype.html'}
-    return Counter(p.suffix.lower() or '[無副檔名]' for p in dest_path.rglob('*') if p.is_file() and p.name not in excluded and not p.name.startswith('_process_log') and not p.name.endswith('_media_report.html'))
+    counts = Counter()
+    dest_root = Path(dest_path)
+    if not dest_root.exists() or not dest_root.is_dir():
+        return counts
+
+    for path_obj in dest_root.rglob("*"):
+        if not path_obj.is_file():
+            continue
+        if is_kairos_self_file(path_obj.name):
+            continue
+        if ".part." in path_obj.name:
+            continue
+        counts[_normalize_ext(path_obj.suffix)] += 1
+
+    return counts
 
 def generate_file_type_summary(output_root_dir, audit_manifest):
-    """產生獨立的副檔名統計頁；目的地數量以本次最終實體檔為準。"""
-    source = Counter(row[4].lower() or '[無副檔名]' for row in audit_manifest)
-    copied = Counter(row[4].lower() or '[no_ext]' for row in audit_manifest if row[6] == 'PASS')
-    skipped = Counter(row[4].lower() or '[no_ext]' for row in audit_manifest if row[6] == 'SKIP')
-    failed = Counter(row[4].lower() or '[no_ext]' for row in audit_manifest if row[6] == 'FAIL')
+    """產生獨立的檔案類型統計頁（先類別彙總，再副檔名明細）。"""
+    source = Counter(_normalize_ext(row[4]) for row in audit_manifest)
+    copied = Counter(_normalize_ext(row[4]) for row in audit_manifest if row[6] == "PASS")
+    skipped = Counter(_normalize_ext(row[4]) for row in audit_manifest if row[6] == "SKIP")
+    failed = Counter(_normalize_ext(row[4]) for row in audit_manifest if row[6] == "FAIL")
     destination = destination_extension_counts(Path(output_root_dir))
-    extensions = sorted(set(source) | set(destination))
-    rows = ''.join(
-        f"<tr><td>{html.escape(ext)}</td><td>{source[ext]:,}</td><td>{copied[ext]:,}</td><td>{skipped[ext]:,}</td><td>{failed[ext]:,}</td><td>{destination[ext]:,}</td></tr>"
+
+    source_by_category = _aggregate_ext_counter_by_category(source)
+    copied_by_category = _aggregate_ext_counter_by_category(copied)
+    skipped_by_category = _aggregate_ext_counter_by_category(skipped)
+    failed_by_category = _aggregate_ext_counter_by_category(failed)
+    destination_by_category = _aggregate_ext_counter_by_category(destination)
+
+    media_categories = ("photo", "video", "raw")
+    media_summary = {
+        "source": sum(source_by_category[c] for c in media_categories),
+        "copied": sum(copied_by_category[c] for c in media_categories),
+        "skipped": sum(skipped_by_category[c] for c in media_categories),
+        "failed": sum(failed_by_category[c] for c in media_categories),
+        "destination": sum(destination_by_category[c] for c in media_categories),
+    }
+    all_summary = {
+        "source": sum(source.values()),
+        "copied": sum(copied.values()),
+        "skipped": sum(skipped.values()),
+        "failed": sum(failed.values()),
+        "destination": sum(destination.values()),
+    }
+
+    category_rows = "".join(
+        f"<tr class='cat-{cat}'><td>{EXT_CATEGORY_LABELS[cat]}</td><td>{source_by_category[cat]:,}</td><td>{copied_by_category[cat]:,}</td><td>{skipped_by_category[cat]:,}</td><td>{failed_by_category[cat]:,}</td><td>{destination_by_category[cat]:,}</td></tr>"
+        for cat in EXT_CATEGORY_ORDER
+    )
+    category_rows += (
+        f"<tr class='summary-row'><td>媒體小計（照片+影片+RAW）</td><td>{media_summary['source']:,}</td><td>{media_summary['copied']:,}</td><td>{media_summary['skipped']:,}</td><td>{media_summary['failed']:,}</td><td>{media_summary['destination']:,}</td></tr>"
+    )
+    category_rows += (
+        f"<tr class='summary-row all-row'><td>全部總計</td><td>{all_summary['source']:,}</td><td>{all_summary['copied']:,}</td><td>{all_summary['skipped']:,}</td><td>{all_summary['failed']:,}</td><td>{all_summary['destination']:,}</td></tr>"
+    )
+
+    extensions = sorted(set(source) | set(copied) | set(skipped) | set(failed) | set(destination), key=_ext_sort_key)
+    ext_rows = "".join(
+        f"<tr class='cat-{_classify_ext_category(ext)}'><td>{html.escape(EXT_CATEGORY_LABELS[_classify_ext_category(ext)])}</td><td>{html.escape(ext)}</td><td>{source[ext]:,}</td><td>{copied[ext]:,}</td><td>{skipped[ext]:,}</td><td>{failed[ext]:,}</td><td>{destination[ext]:,}</td></tr>"
         for ext in extensions
     )
-    generated_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    content = f'''<!doctype html><html lang="zh-TW"><meta charset="utf-8"><title>檔案類型統計</title>
-    <style>body{{font-family:Segoe UI,sans-serif;margin:24px;color:#2c3e50}}table{{border-collapse:collapse;width:100%;max-width:900px}}th,td{{padding:9px 12px;border:1px solid #dfe6e9;text-align:right}}th:first-child,td:first-child{{text-align:left}}th{{background:#eef2f3}}</style>
-    <h1>檔案類型統計 <span style="color:#95A5A6;font-size:13px;font-weight:normal;">(Generated : {generated_ts})</span></h1><p>來源掃描數包含本次掃描範圍內所有副檔名；目的地實際數不含程式產生的報表與日誌。</p>
-    <table><tr><th>Ext</th><th>Scanned</th><th>PASS</th><th>SKIP</th><th>FAIL</th><th>Dest Count</th></tr>{rows}</table></html>'''
-    with open(Path(output_root_dir) / '_manifest_filetype.html', 'w', encoding='utf-8') as f:
+
+    generated_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    content = f"""<!doctype html>
+<html lang="zh-TW">
+<meta charset="utf-8">
+<title>檔案類型統計</title>
+<style>
+body {{ font-family: Segoe UI, sans-serif; margin: 24px; color: #2c3e50; }}
+h2 {{ margin: 20px 0 10px; font-size: 20px; color: #2c3e50; }}
+p {{ line-height: 1.5; }}
+table {{ border-collapse: collapse; width: 100%; max-width: 1020px; margin-bottom: 18px; }}
+th, td {{ padding: 9px 12px; border: 1px solid #dfe6e9; text-align: right; box-sizing: border-box; }}
+th:first-child, td:first-child {{ text-align: left; }}
+th {{ background: #fbe0b5; }}
+tr[class^="cat-"] {{ transition: background-color 0.12s ease, outline-color 0.12s ease; }}
+.cat-photo {{ background: #EBF3FA; }}
+.cat-photo:hover {{ background: #E2E9F0; }}
+.cat-video {{ background: #EAF5ED; }}
+.cat-video:hover {{ background: #E1EBE4; }}
+.cat-raw {{ background: #FEF6E6; }}
+.cat-raw:hover {{ background: #F4ECDD; }}
+.cat-other {{ background: #F0F1F3; }}
+.cat-other:hover {{ background: #E6E7E9; }}
+tr[class^="cat-"]:hover {{
+    outline: 1px solid #84b1f9;
+    outline-offset: 2px;
+}}
+.summary-row {{ font-weight: bold; background: #f8f9fa; }}
+.all-row {{ background: #eaf2f8; }}
+</style>
+<h1>檔案類型統計 <span style="color:#95A5A6;font-size:13px;font-weight:normal;">(Generated : {generated_ts})</span></h1>
+<p>目的地統計已排除程式自產報表/清單檔。</p>
+
+<h2>類別彙總</h2>
+<table>
+<tr><th>Type</th><th>Scanned</th><th>PASS</th><th>SKIP</th><th>FAIL</th><th>Dest Count</th></tr>
+{category_rows}
+</table>
+
+<h2>副檔名明細</h2>
+<table>
+<tr><th>Type</th><th>Ext</th><th>Scanned</th><th>PASS</th><th>SKIP</th><th>FAIL</th><th>Dest Count</th></tr>
+{ext_rows}
+</table>
+</html>"""
+    with open(Path(output_root_dir) / "_manifest_filetype.html", "w", encoding="utf-8") as f:
         f.write(content)
 
 def generate_manifest_html(output_root_dir, audit_manifest):
@@ -47,8 +174,10 @@ def generate_manifest_html(output_root_dir, audit_manifest):
     html_path = Path(output_root_dir) / "_index.html"
     generated_ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     has_geo_column = any(len(row) > 9 for row in audit_manifest)
-    geo_filter_btn_html = '<button onclick="setFilter(\'status\', \'GEO\', this)">🌏 GEO</button>' if has_geo_column else ''
+    has_consistency_category = any(str(row[5]).lower() == "consistency" for row in audit_manifest if len(row) > 5)
+    geo_filter_btn_html = '<button onclick="setFilter(\'status\', \'GEO\', this)">GEO</button>' if has_geo_column else ''
     geo_header_html = '<th>地圖</th>' if has_geo_column else ''
+    consistency_filter_btn_html = '<button onclick="setFilter(\'cat\', \'consistency\', this)">一致性</button>' if has_consistency_category else ''
 
     clean_data = []
     for row in audit_manifest:
@@ -89,7 +218,6 @@ def generate_manifest_html(output_root_dir, audit_manifest):
         button:hover, button.active {{ background: #2C3E50; }}
         button:disabled {{ background: #BDC3C7; cursor: not-allowed; }}
         input[type="text"] {{ padding: 8px 12px; border-radius: 5px; border: 1px solid var(--border); outline: none; font-size: 14px; width: 280px; }}
-
         /* 分頁控制器 */
         .pagination-bar {{ display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 12px 20px; border-radius: 8px; margin-bottom: 15px; border: 1px solid var(--border); flex-wrap: wrap; gap: 10px; }}
         .page-info {{ font-weight: bold; color: #2C3E50; font-size: 14px; }}
@@ -117,22 +245,22 @@ def generate_manifest_html(output_root_dir, audit_manifest):
 <body>
     <header>
         <h1>
-            <span>📋 照片影片處理總報表 <span class="generated-time">(Generated : {generated_ts})</span></span>
+            <span>照片影片處理總報表 <span class="generated-time">(Generated : {generated_ts})</span></span>
             <span style="font-size: 14px; color: #7F8C8D; font-weight: normal;">總收錄: <strong id="totalCount" style="color:#2C3E50;">0</strong> 筆資料</span>
         </h1>
         {get_stats_banner_html()}
         <div class="filter-bar">
-            <button onclick="window.open('_manifest_filetype.html','fileTypeSummary','width=980,height=720')">檔案類型統計</button>
-            <span>🔍 搜尋過濾:</span>
+            <button onclick="window.open('_manifest_filetype.html','fileTypeSummary','width=1280,height=960')">檔案類型統計</button>
+            <span>搜尋過濾:</span>
             <input type="text" id="searchInput" oninput="debounceFilter()" placeholder="關鍵字 (檔名、相機、插件訊息)...">
 
             <span style="margin-left: 10px;">狀態篩選:</span>
             <div class="btn-group" id="statusBtns">
                 <button class="active" onclick="setFilter('status', 'all', this)">全部</button>
                 {geo_filter_btn_html}
-                <button onclick="setFilter('status', 'PASS', this)">✅ PASS</button>
-                <button onclick="setFilter('status', 'SKIP', this)">⏭️ SKIP</button>
-                <button onclick="setFilter('status', 'FAIL', this)">❌ FAIL</button>
+                <button onclick="setFilter('status', 'PASS', this)">PASS</button>
+                <button onclick="setFilter('status', 'SKIP', this)">SKIP</button>
+                <button onclick="setFilter('status', 'FAIL', this)">FAIL</button>
             </div>
 
             <span style="margin-left: 10px;">類別:</span>
@@ -141,6 +269,7 @@ def generate_manifest_html(output_root_dir, audit_manifest):
                 <button onclick="setFilter('cat', 'standard', this)">照片</button>
                 <button onclick="setFilter('cat', 'video', this)">影片</button>
                 <button onclick="setFilter('cat', 'raw', this)">RAW</button>
+                {consistency_filter_btn_html}
             </div>
         </div>
     </header>
@@ -149,8 +278,8 @@ def generate_manifest_html(output_root_dir, audit_manifest):
     <div class="pagination-bar">
         <div class="btn-group">
             <button id="btnFirst" onclick="changePage(1)">⏪ 第一頁</button>
-            <button id="btnPrev" onclick="changePage(currentPage - 1)">◀ 上一頁</button>
-            <button id="btnNext" onclick="changePage(currentPage + 1)">下一頁 ▶</button>
+            <button id="btnPrev" onclick="changePage(currentPage - 1)">上一頁</button>
+            <button id="btnNext" onclick="changePage(currentPage + 1)">下一頁</button>
             <button id="btnLast" onclick="changePage(totalPages)">最末頁 ⏩</button>
         </div>
         <div class="page-info">
